@@ -1,19 +1,20 @@
 
-library(igraph)
+suppressMessages(library(igraph))
 
-N <- 13
-middle <- 5
-outer <- (N-middle)/2
-L <- list(c(1:outer), c((outer+1):(outer+middle)), c((outer+middle+1):N))
-N <- sum(length(unlist(L)))
-U <- lapply(L, function(u) {u+N})
-M <- N
+N <- 9
+middle <- 3
 
 N_color <- "#3030cc"
 M_color <- "#61a347"
 concept_color <- "#fff9ab"
 edges_color <- "#202020"
 vertex_size <- 10
+
+outer <- (N-middle)/2
+L <- list(c(1:outer), c((outer+1):(outer+middle)), c((outer+middle+1):N))
+N <- sum(length(unlist(L)))
+U <- lapply(L, function(u) {u+N})
+M <- N
 
 big_cluster <- function() {
     edges <- c()
@@ -70,13 +71,82 @@ get_location <- function(label=c("12", "23", "mid_L", "mid_U")) {
     }
 }
 
+get_all_edges <- function(set1, set2) {
+    edges <- c()
+    for(s1 in set1) {
+        for(s2 in set2) {
+            edges <- c(edges, c(s1,s2))
+        }
+    }
+    return(edges)
+}
+
 single_binding <- function(label=c("12", "23", "mid_L", "mid_U")) {
     edges <- c()
+    additional <- N+M+1
+
+    for(I in 1:3) {
+        for(J in 1:3) {
+            if(label == "12" && I %in% c(1,2) && J %in% c(1,2)) {
+                next
+            }
+            if(label == "23" && I %in% c(2,3) && J %in% c(2,3)) {
+                next
+            }
+            if(label == "mid_L" && J == 2) {
+                next
+            }
+            if(label == "mid_U" && I == 2) {
+                next
+            }
+            edges <- c(edges, get_all_edges(U[[I]], L[[J]]))
+        }
+    }
+
+    if(label == "12") {
+        for(I in 1:2) {
+            for(u in U[[I]]) {
+                edges <- c(edges, c(additional, u))
+            }
+        }
+        for(J in 1:2) {
+            for(l in L[[J]]) {
+                edges <- c(edges, c(l, additional))
+            }
+        }
+    }
+    if(label == "23") {
+        for(I in 2:3) {
+            for(u in U[[I]]) {
+                edges <- c(edges, c(additional, u))
+            }
+        }
+        for(J in 2:3) {
+            for(l in L[[J]]) {
+                edges <- c(edges, c(l, additional))
+            }
+        }
+    }
+    if(label == "mid_L") {
+        for(l in L[[2]]) {
+            edges <- c(edges, c(l, additional))
+        }
+        for(u in unlist(U)) {
+            edges <- c(edges, c(additional, u))
+        }
+    }
+    if(label == "mid_U") {
+        for(l in unlist(L)) {
+            edges <- c(edges, c(l, additional))
+        }
+        for(u in U[[2]]) {
+            edges <- c(edges, c(additional, u))
+        }
+    }
 
     locations1 <- t(sapply(1:N, function(j) { c(j,0) }))
     locations2 <- t(sapply(1:M, function(j) { c(j,1) }))
-
-    locations <- rbind(locations1, locations2, ...)
+    locations <- rbind(locations1, locations2, get_location(label=label))
     graph <- make_graph(edges, directed = TRUE)
     vertex_colors <- c(rep(N_color, N), rep(M_color, M), rep(concept_color, 1))
     return(list(graph, locations, vertex_colors))    
@@ -91,9 +161,7 @@ bind_all <- function() {
     pair_binding_U[2,3] <- N+M+2
     mid_L <- N+M+3
     mid_U <- N+M+4
-
     edges <- c()
-
     for(I in 1:3) {
         for(J in 1:3) {
             if(pair_binding_U[I,J] != 0) {
@@ -131,15 +199,6 @@ bind_all <- function() {
     locations1 <- t(sapply(1:N, function(j) { c(j,0) }))
     locations2 <- t(sapply(1:M, function(j) { c(j,1) }))
 
-    # d <- ( (middle+outer-1) ) /2
-    # locations12 <- c( 1 +         d, 0.50)
-    # locations23 <- c( 1 + (N-1) - d, 0.50)
-
-    # i <- (middle-1)
-    # a <- (outer)
-    # e <- i / (2*(a+i))
-    # locationsL2 <- c( 1 + (N-1)/2, e)
-    # locationsU2 <- c( 1 + (N-1)/2, 1-e)
     locations <- rbind(locations1, locations2, get_location("12"), get_location("23"), get_location("mid_L"), get_location("mid_U"))
     graph <- make_graph(edges, directed = TRUE)
     vertex_colors <- c(rep(N_color, N), rep(M_color, M), rep(concept_color, 4))
@@ -150,23 +209,28 @@ plot_result <- function(l) {
     plot(l[[1]], layout=l[[2]], vertex.label=NA, vertex.color=l[[3]], edge.color=edges_color, vertex.size=vertex_size)    
 }
 
+to_png <- function(l, name) {
+    png(name)
+    par(mar=c(0,0,0,0)+.1)
+    plot_result(l)
+    dev.off()
+}
+
 graph_all <- big_cluster()
-png("graph_all.png")
-par(mar=c(0,0,0,0)+.1)
-plot_result(graph_all)
-dev.off()
-
 graph_big_cluster_binding <- big_cluster_binding()
-png("graph_big_cluster_binding.png")
-par(mar=c(0,0,0,0)+.1)
-plot_result(graph_big_cluster_binding)
-dev.off()
-
+graph_single_12 <- single_binding("12")
+graph_single_23 <- single_binding("23")
+graph_single_mid_L <- single_binding("mid_L")
+graph_single_mid_U <- single_binding("mid_U")
 graph_bind_all <- bind_all()
-png("graph_bind_all.png")
-par(mar=c(0,0,0,0)+.1)
-plot_result(graph_bind_all)
-dev.off()
+
+to_png(graph_all, "graph_all.png")
+to_png(graph_big_cluster_binding, "graph_big_cluster_binding.png")
+to_png(graph_single_12, "graph_single_12.png")
+to_png(graph_single_23, "graph_single_23.png")
+to_png(graph_single_mid_L, "graph_single_mid_L.png")
+to_png(graph_single_mid_U, "graph_single_mid_U.png")
+to_png(graph_bind_all, "graph_bind_all.png")
 
 # Generates PDFs when used with Rscript
 # dev.new()
