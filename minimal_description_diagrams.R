@@ -16,3 +16,4 @@ calculate_all_minimal_diagrams <- function(dimension = 3) {
 	subsets <- t(sapply(c(1:number_subsets), FUN=function(s) { return(as.integer(intToBits(s))[1:(2^dimension)]) }))
 	return(subsets)
 }
+

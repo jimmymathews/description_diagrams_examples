@@ -16,38 +16,45 @@ N <- sum(length(unlist(L)))
 U <- lapply(L, function(u) {u+N})
 M <- N
 
-big_cluster <- function() {
+focus_one_cluster <- function() {
     edges <- c()
-    for(i in 1:N) {
-        for(j in 1:M) {
-            edges <- c(edges, c(i,N+j))
+    N12 <- outer + middle
+    for(i in 1:N12) {
+        for(j in 1:N12) {
+            edges <- c(edges, c(i,N12+j))
         }
     }
-    graph <- make_bipartite_graph(c(rep(0, N), rep(1, M)), edges, directed = TRUE)
-    locations1 <- t(sapply(1:N, function(j) { c(j,0) }))
-    locations2 <- t(sapply(1:M, function(j) { c(j,1) }))
-    locations <- rbind(locations1, locations2)
-    vertex_colors <- c(rep(N_color, N), rep(M_color, M))
+    graph <- make_bipartite_graph(c(rep(0, N12), rep(1, N12)), edges, directed = TRUE)
+    add_vertices(graph, 2*outer)
+    locations1 <- t(sapply(1:N12, function(j) { c(j,0) }))
+    locations2 <- t(sapply(1:N12, function(j) { c(j,1) }))
+    locations3 <- t(sapply(((N12+1):N), function(j){ c(j,0) }))
+    locations4 <- t(sapply(((N12+1):M), function(j){ c(j,1) }))
+    locations <- rbind(locations1, locations2, locations3, locations4)
+    vertex_colors <- c(rep(N_color, N12), rep(M_color, N12), rep(N_color, outer), rep(M_color, outer))
     return(list(graph, locations, vertex_colors))
 }
 
-big_cluster_binding <- function() {
+focus_one_cluster_binding <- function() {
     binding <- N+M+1
     edges <- c()
-    for(i in 1:N) {
+    N12 <- outer + middle
+    for(i in 1:N12) {
         l <- i
         edges <- c(edges, c(l, binding))
     }
-    for(j in 1:M) {
-        u <- j + N
+    for(j in 1:N12) {
+        u <- j + N12
         edges <- c(edges, c(binding, u))
     }
-    locations1 <- t(sapply(1:N, function(j) { c(j,0) }))
-    locations2 <- t(sapply(1:M, function(j) { c(j,1) }))
-    locationsb <- c((1+N)/2, 0.5)
-    locations <- rbind(locations1, locations2, locationsb)
     graph <- make_graph(edges, directed = TRUE)
-    vertex_colors <- c(rep(N_color, N), rep(M_color, M), rep(concept_color, 4))
+    add_vertices(graph, 2*outer)
+    locations1 <- t(sapply(1:N12, function(j) { c(j,0) }))
+    locations2 <- t(sapply(1:N12, function(j) { c(j,1) }))
+    locations3 <- t(sapply(((N12+1):N), function(j){ c(j,0) }))
+    locations4 <- t(sapply(((N12+1):M), function(j){ c(j,1) }))
+    locations <- rbind(locations1, locations2, locations3, locations4, get_location("12"))
+    vertex_colors <- c(rep(N_color, N12), rep(M_color, N12), rep(N_color, outer), rep(M_color, outer), concept_color)
     return(list(graph, locations, vertex_colors))
 }
 
@@ -99,7 +106,15 @@ single_binding <- function(label=c("12", "23", "mid_L", "mid_U")) {
             if(label == "mid_U" && I == 2) {
                 next
             }
-            edges <- c(edges, get_all_edges(U[[I]], L[[J]]))
+            if(abs(I-J) > 1) {
+                next
+            }
+            print(I)
+            print(J)
+            edges <- c(edges, get_all_edges(L[[J]], U[[I]]))
+            print(L[[J]])
+            print(U[[I]])
+            print("")
         }
     }
 
@@ -213,11 +228,10 @@ to_png <- function(l, name) {
     png(name)
     par(mar=c(0,0,0,0)+.1)
     plot_result(l)
-    dev.off()
 }
 
-graph_all <- big_cluster()
-graph_big_cluster_binding <- big_cluster_binding()
+graph_all <- focus_one_cluster()
+graph_focus_one_cluster_binding <- focus_one_cluster_binding()
 graph_single_12 <- single_binding("12")
 graph_single_23 <- single_binding("23")
 graph_single_mid_L <- single_binding("mid_L")
@@ -225,7 +239,7 @@ graph_single_mid_U <- single_binding("mid_U")
 graph_bind_all <- bind_all()
 
 to_png(graph_all, "graph_all.png")
-to_png(graph_big_cluster_binding, "graph_big_cluster_binding.png")
+to_png(graph_focus_one_cluster_binding, "graph_focus_one_cluster_binding.png")
 to_png(graph_single_12, "graph_single_12.png")
 to_png(graph_single_23, "graph_single_23.png")
 to_png(graph_single_mid_L, "graph_single_mid_L.png")
@@ -236,7 +250,7 @@ to_png(graph_bind_all, "graph_bind_all.png")
 # dev.new()
 # plot_result(graph_all)
 # dev.new()
-# plot_result(graph_big_cluster_binding)
+# plot_result(graph_focus_one_cluster_binding)
 # dev.new()
 # plot_result(graph_bind_all)
 
