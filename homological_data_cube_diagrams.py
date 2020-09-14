@@ -3,6 +3,14 @@ import numpy as np
 from colors import *
 
 class FacetSignature:
+    '''
+    An object to wrap the signature of a facet with behaviors.
+    The signature is a sorted tuple of integers labelling the faces containing the facet.
+    Faces are labelled as follows:
+    - The 0-value face for the i-th feature is i
+    - The 1-value face for the i-th features is i+n
+    Indices start with 0.
+    '''
     def __init__(self, signature, top=None):
         self.signature = signature
         self.top = top
@@ -30,6 +38,14 @@ class FacetSignature:
 
 
 class Facet:
+    '''
+    Represents a facet of a given cube.
+    signature_object is an object of type FacetSignature.
+    This object identifies which facet this is in the context of the given cube.
+    The parents and children are direct only. They are not determined at constructor
+    time because the facet containment data structure is not a tree, so it does
+    not admit of one-shot recursive construction starting from the top element.
+    '''
     def __init__(self, dimension=3, signature_object=None):
         self.dimension = dimension
         self.signature_object = signature_object
@@ -41,6 +57,10 @@ class Facet:
         other._register_direct_child(self)
 
     def _register_direct_child(self, other):
+        '''
+        To be used only by register_direct_parent.
+        This reduces potential for error where a parent relationship is recorded but not the inverse relation.
+        '''
         self.children[other] = other
 
     def contained_in(self, other):
@@ -54,6 +74,9 @@ class Facet:
 
 
 class FacetPair:
+    '''
+    Intended to be used as a basis element in the set of 1-chains of the barycentric subdivision of a given cube.
+    '''
     def __init__(self, f1, f2):
         assert(f1.contained_in(f2))
         self.f1 = f1
@@ -64,6 +87,11 @@ class FacetPair:
 
 
 class DataCube:
+    '''
+    Represents the standard cube complex structure on the cube of a given dimension.
+    Currently it is memory intensive, storing objects for every facet.
+    In the future, there may be a way to create them on the fly as needed.
+    '''
     def __init__(self, dimension=3, verbose=True):
         self.verbose = verbose
         self.dimension = dimension
@@ -131,32 +159,47 @@ class DataCube:
         assert(feature_matrix.shape[1] == n)
         tuples = [tuple(row) for row in feature_matrix]
         uniques = np.unique(tuples, axis=0)
-        vertices = [cube.get_vertex([row[l] for l in range(n)]) for row in uniques]
-        chain = DescriptionChain(self, vertices)
-        for vertex in chain.vertices:
-            for face in cube.facets_of_dimension[n-1].values():
+        vertices = [self.get_vertex([row[l] for l in range(n)]) for row in uniques]
+        # chain = DescriptionChain(self, vertices)
+        chain = DescriptionChain(self)
+        for vertex in vertices:
+            for face in self.facets_of_dimension[n-1].values():
                 if vertex.contained_in(face):
                     pair = FacetPair(vertex, face)
                     chain.coefficients[pair] = 1
         return chain
 
 
-
 class DescriptionChain:
-    def __init__(self, cube, vertices):
+    '''
+    A 1-chain in the barycentric subdivision of a given cube, capturing the
+    information of a given feature matrix (i.e. homologous to the raw data
+    chain of the feature matrix).
+    '''
+    def __init__(self, cube):
         self.cube = cube
-        self.vertices = vertices
         self.coefficients = {}
+
+    def get_vertices(self):
+        return list(set([pair.f1 if pair.f1.dimension==0 else None for pair in self.coefficients]))
 
     def __repr__(self):
         display_width = max([len(str(coefficient)) for coefficient in self.coefficients.values()])
-        return '\n'.join([magenta + str(self.coefficients[pair]).ljust(display_width+1) + reset + repr(pair) for pair in self.coefficients])
+        return '\n'.join([green + str(self.coefficients[pair]).ljust(display_width+1) + reset + repr(pair) for pair in self.coefficients])
 
 
 class HomologicalMinimumCalculator:
-    def __init__(self, feature_matrix, dimension=3):
-        self.dimension = dimension
-        self.feature_matrix = feature_matrix
+    '''
+    For a given feature matrix, leading to the 1-chain c0, this calculator attempts to find the element of
+    smallest geometric norm belonging to the integral homology class of c0 relative to the sample set
+    (vertices of the cube) and the attribute set barycenters. Equivalently, c0 plus the closest element of
+    the lattice of boundaries of relative 2-chains to the element -c0.
+    Note that the latter lattice is independent of the feature matrix. Computations concerning this lattice,
+    like short bases, can be performed in advance knowing only the dimension of the cube.
+    '''
+    def __init__(self, feature_matrix):
+        self.cube = DataCube(dimension=feature_matrix.shape[1], verbose=False)
+        self.c0 = self.cube.get_raw_data_chain(feature_matrix)
 
     def calculate_barycentric_1_skeleton(self):
         pass
@@ -168,7 +211,9 @@ class HomologicalMinimumCalculator:
         pass
 
 
-cube = DataCube(dimension=5, verbose=False)
 feature_matrix = np.array([[0,0,0,0,1], [0,0,0,1,1], [0,1,1,1,1]])
-c0 = cube.get_raw_data_chain(feature_matrix)
-print(c0)
+calculator = HomologicalMinimumCalculator(feature_matrix)
+print(          'Raw data chain')
+print(magenta + '--------------' + reset)
+print(calculator.c0)
+
