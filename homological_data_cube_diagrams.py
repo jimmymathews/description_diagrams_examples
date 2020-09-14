@@ -1,5 +1,8 @@
 import itertools
 import numpy as np
+from scipy import sparse
+from scipy import linalg
+from math import sqrt
 from colors import *
 
 class FacetSignature:
@@ -65,6 +68,18 @@ class Facet:
 
     def contained_in(self, other):
         return other.signature_object.implies(self.signature_object)
+
+    def get_all_parents(self, exclude_self=False):
+        if exclude_self:
+            return list(set(itertools.chain(*[direct_parent.get_all_parents() for direct_parent in self.parents])))
+        else:
+            return [self] + list(itertools.chain(*[direct_parent.get_all_parents() for direct_parent in self.parents]))
+
+    def pair(self, other):
+        return (self.signature_object.signature, other.signature_object.signature)
+
+    def triple(self, other1, other2):
+        return (self.signature_object.signature, other1.signature_object.signature, other2.signature_object.signature)
 
     def __str__(self):
         return str(self.signature_object)
@@ -183,6 +198,13 @@ class DescriptionChain:
     def get_vertices(self):
         return list(set([pair.f1 if pair.f1.dimension==0 else None for pair in self.coefficients]))
 
+    def geometric_norm(self):
+        l = 0
+        for pair in self.coefficients:
+            coefficient = self.coefficients[pair]
+            l = l + coefficient * sqrt(pair.f2.dimension - pair.f1.dimension)
+        return l
+
     def __repr__(self):
         display_width = max([len(str(coefficient)) for coefficient in self.coefficients.values()])
         return '\n'.join([green + str(self.coefficients[pair]).ljust(display_width+1) + reset + repr(pair) for pair in self.coefficients])
@@ -191,28 +213,121 @@ class DescriptionChain:
 class HomologicalMinimumCalculator:
     '''
     For a given feature matrix, leading to the 1-chain c0, this calculator attempts to find the element of
-    smallest geometric norm belonging to the integral homology class of c0 relative to the sample set
-    (vertices of the cube) and the attribute set barycenters. Equivalently, c0 plus the closest element of
-    the lattice of boundaries of relative 2-chains to the element -c0.
-    Note that the latter lattice is independent of the feature matrix. Computations concerning this lattice,
+    smallest geometric norm (Q) belonging to the integral homology class of c0 relative to the union of the
+    sample set (certain vertices of the cube) and the attribute set barycenters.
+    Equivalently, c0 plus the closest element of the lattice of boundaries of relative 2-chains to the element -c0.
+
+    Note that this lattice is independent of the feature matrix. Computations concerning this lattice,
     like short bases, can be performed in advance knowing only the dimension of the cube.
+
+    Note also that there is a shortcut heuristic using basic linear algebra, namely to find the intersection
+    of the translation of the plane P spanned by the lattice to c0 and the Q-orthogonal complement of P. The
+    resulting point will be close to the sought-after lattice element, but will not typically have integer coefficients.
+
+    To do this last operation, one still needs a basis for the boundaries subspace.
+    This can be done as follows. The matrix of the mapping C2(B)->C1(B) consists of rows of the following format.
+    A basis element of C2(B) is given by an ordered triple of facets, one properly contained in the next:
+        f1 < f2 < f3.
+    Its boundary is the element of C1(B) with coefficients:
+        1 for facet pair (f1, f3), -1 for facet pairs (f1, f2) and (f2, f3), 0 else
+    These coefficients lined up with respect to an ordering of the basis of C1(B) comprises a row vector.
+
+    After forming the matrix consisting of the rows as above, one needs a basis for the column space.
+    Use a linear algebra package.
+    The dimension of C1(B) is equal to the number of pairs (f1, f2), f1 < f2 (excluding cases f1=top and f2=top).
+    This dimension can also be calculated as follows:
+    Each basis element of C1(B) labels a 1-cell that belongs to a unique open facet of the original standard cube complex.
+    The number of such 1-cells in a given original facet is equal to the number of vertices of that facet, i.e. 2^dim(facet).
+    Thus the number of 1-cells of the barycentric subdivision is equal to:
+        sum over m: 2^m * #{ facets of standard cube which have dimension m }
+    According to wikipedia, that # is:
+        2^(n-m) (n choose m)
+    Thus the formula for the number of basis elements of C1(B) is:
+        sum over m: 2^n * (n choose m)
+          = 2^n * sum over m: (n choose m)
+          = 2^n * (2^n - 1)
+          = 2^(2n) - 2^n
+
+    *Future feature request: Implement navigation through basis elements with an iterator.
     '''
-    def __init__(self, feature_matrix):
+    def __init__(self, dimension=None, feature_matrix=np.array([[]])):
+        assert(dimension == None or feature_matrix == np.array([[]]))
+        if feature_matrix != np.array([[]]):
+            self.set_feature_matrix(feature_matrix)
+        else:
+            self.cube = DataCube(dimension=dimension, verbose=False)
+        self.calculate_boundaries_lattice()
+
+    def set_feature_matrix(self, feature_matrix):
         self.cube = DataCube(dimension=feature_matrix.shape[1], verbose=False)
         self.c0 = self.cube.get_raw_data_chain(feature_matrix)
 
-    def calculate_barycentric_1_skeleton(self):
-        pass
+    def calculate_C1_basis(self):
+        C1_basis_indices = {}
+        C1_basis = {}
+        n = self.cube.dimension
+        count = 0
+        for facet in self.cube.facets.values():
+            f1 = facet
+            parents = f1.get_all_parents(exclude_self=True)
+            for parent in parents:
+                f2 = parent
+                C1_basis_indices[f1.pair(f2)] = count
+                C1_basis[count] = f1.pair(f2)
+                count = count + 1
+        return [C1_basis_indices, C1_basis]
 
-    def calculate_search_lattice(self):
-        pass
+    def calculate_C2_basis(self):
+        C2_basis_indices = {}
+        C2_basis = {}
+        n = self.cube.dimension
+        count = 0
+        for facet in self.cube.facets.values():
+            f1 = facet
+            parents1 = f1.get_all_parents(exclude_self=True)
+            for parent1 in parents1:
+                f2 = parent1
+                parents2 = f2.get_all_parents(exclude_self=True)
+                for parent2 in parents2:
+                    f3 = parent2
+                    C2_basis_indices[f1.triple(f2, f3)] = count
+                    C2_basis[count] = f1.triple(f2, f3)
+                    count = count + 1
+        return [C2_basis_indices, C2_basis]
+
+    def calculate_boundaries_lattice(self):
+        self.C1_basis_indices, self.C1_basis = self.calculate_C1_basis()
+        self.C2_basis_indices, self.C2_basis = self.calculate_C2_basis()
+        N = len(self.C1_basis)
+        K = len(self.C2_basis)
+        c2_index = []
+        c1_index = []
+        values = []
+        for i in range(K):
+            c2_index = c2_index + [i, i, i]
+            c2 = self.C2_basis[i]
+            f1 = self.cube[c2[0]]
+            f2 = self.cube[c2[1]]
+            f3 = self.cube[c2[2]]
+
+            f1f2 = self.C1_basis_indices[f1.pair(f2)]
+            f2f3 = self.C1_basis_indices[f2.pair(f3)]
+            f1f3 = self.C1_basis_indices[f1.pair(f3)]
+
+            c1_index = c1_index + [f1f2, f2f3, f1f3]
+            values = values + [1, 1, -1]
+
+        # self.x = [values, c2_index, c1_index]
+        self.d_sparse = sparse.coo_matrix((np.array(values), (np.array(c2_index), np.array(c1_index))))
+        self.d = self.d_sparse.toarray()
 
     def get_minimal_chain(self):
         pass
 
 
-feature_matrix = np.array([[0,0,0,0,1], [0,0,0,1,1], [0,1,1,1,1]])
-calculator = HomologicalMinimumCalculator(feature_matrix)
+# feature_matrix = np.array([[0,0,0,0,1], [0,0,0,1,1], [0,1,1,1,1]])
+feature_matrix = np.array([[0,0,0], [0,1,1], [1,1,1]])
+calculator = HomologicalMinimumCalculator(feature_matrix=feature_matrix)
 print(          'Raw data chain')
 print(magenta + '--------------' + reset)
 print(calculator.c0)
