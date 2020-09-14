@@ -210,7 +210,7 @@ class DescriptionChain:
     def __init__(self, cube):
         self.cube = cube
         self.coefficients = {}
-        self.tolerance = 0.25
+        self.tolerance = 0.3
 
     def get_vertices(self):
         return list(set([pair.f1 if pair.f1.dimension==0 else None for pair in self.coefficients]))
@@ -241,8 +241,12 @@ class DescriptionChain:
     def __repr__(self):
         display_width = max([len(str(coefficient)) for coefficient in self.coefficients.values()])
         tolerance = self.tolerance
-        significant = [self.cube.get_facet_pair_object(pair) for pair in self.coefficients if abs(self.coefficients[pair]) >= tolerance]
-        insignificant = [self.cube.get_facet_pair_object(pair) for pair in self.coefficients if abs(self.coefficients[pair]) < tolerance]
+
+        kv = [item for item in self.coefficients.items()]
+        kvs = sorted(kv, key=lambda x: x[1])
+
+        significant = [self.cube.get_facet_pair_object(pair) for pair, coefficient in kvs if abs(coefficient) >= tolerance]
+        insignificant = [self.cube.get_facet_pair_object(pair) for pair, coefficient in kvs if abs(coefficient) < tolerance]
         significant = [green + str(self.coefficients[pair.get_signature_pair()]).ljust(display_width+1) + reset + repr(pair) for pair in significant]
         insignificant = [red + str(self.coefficients[pair.get_signature_pair()]).ljust(display_width+1) + reset + repr(pair) for pair in insignificant]
 
@@ -279,12 +283,13 @@ class DescriptionChain:
             if v[i] != 0:
                 self.coefficients[pair] = v[i]
 
-        kv = [item for item in self.coefficients.items()]
-        kvs = sorted(kv, key=lambda x: x[1])
-        nc = {}
-        for key, value in kvs:
-            nc[key] = value
-        self.coefficients = nc
+    def truncate_from(self, cr):
+        c = self.copy()
+        for key in cr.coefficients:
+            if key in c.coefficients:
+                del c.coefficients[key]
+        return c
+
 
 class GeometricWeightedCoordinateChanger(object):
     def __init__(self, calculator):
@@ -436,6 +441,8 @@ class HomologicalMinimumCalculator:
             print('Return to original.')
             print('')
 
+        self.truncated = self.projected_cr.truncate_from(self.cr)
+
     def change_C1_coordinates(self, system):
         '''
         The geometric norm Q on C1(B) is conformal to the standard Euclidean norm with respect to the
@@ -490,5 +497,8 @@ print(calculator.cr)
 print('')
 print('Projected')
 print(calculator.projected_cr)
+print('')
+print('Truncated')
+print(calculator.truncated)
 print('')
 
