@@ -210,6 +210,7 @@ class DescriptionChain:
     def __init__(self, cube):
         self.cube = cube
         self.coefficients = {}
+        self.tolerance = 0.25
 
     def get_vertices(self):
         return list(set([pair.f1 if pair.f1.dimension==0 else None for pair in self.coefficients]))
@@ -218,7 +219,7 @@ class DescriptionChain:
         l = 0
         for pair in self.coefficients:
             coefficient = self.coefficients[pair]
-            if only_support:
+            if only_support and coefficient >= self.tolerance:
                 l = l + DescriptionChain.get_basis_norm(self.cube.get_facet_pair_object(pair))
             else:
                 l = l + coefficient*coefficient * DescriptionChain.get_basis_norm(self.cube.get_facet_pair_object(pair))
@@ -228,7 +229,7 @@ class DescriptionChain:
         l = 0
         for pair in self.coefficients:
             coefficient = self.coefficients[pair]
-            if only_support:
+            if only_support and coefficient >= self.tolerance:
                 l = l + 1
             else:
                 l = l + coefficient*coefficient
@@ -239,7 +240,7 @@ class DescriptionChain:
 
     def __repr__(self):
         display_width = max([len(str(coefficient)) for coefficient in self.coefficients.values()])
-        tolerance = 0.25
+        tolerance = self.tolerance
         significant = [self.cube.get_facet_pair_object(pair) for pair in self.coefficients if abs(self.coefficients[pair]) >= tolerance]
         insignificant = [self.cube.get_facet_pair_object(pair) for pair in self.coefficients if abs(self.coefficients[pair]) < tolerance]
         significant = [green + str(self.coefficients[pair.get_signature_pair()]).ljust(display_width+1) + reset + repr(pair) for pair in significant]
@@ -456,8 +457,8 @@ class HomologicalMinimumCalculator:
                 self.projected_cr.coefficients[signature_pair] = coefficient / norm
             for index, signature_pair in self.C1_basis.items():
                 norm = sqrt(DescriptionChain.get_basis_norm(self.cube.get_facet_pair_object(signature_pair)))
-                v = np.multiply(self.d[:,index], 1/norm)
-                self.d[:,index] = v
+                v = np.multiply(self.d[index,:], 1/norm)
+                self.d[index,:] = v
             return
         if system == 'geometric weighted' and self.cube.current_coordinate_system == 'standard Euclidean':
             self.cube.current_coordinate_system = system
@@ -469,8 +470,8 @@ class HomologicalMinimumCalculator:
                 self.projected_cr.coefficients[signature_pair] = coefficient * norm
             for index, signature_pair in self.C1_basis.items():
                 norm = sqrt(DescriptionChain.get_basis_norm(self.cube.get_facet_pair_object(signature_pair)))
-                v = np.multiply(self.d[:,index], norm)
-                self.d[:,index] = v
+                v = np.multiply(self.d[index,:], norm)
+                self.d[index,:] = v
             return
 
     def get_minimal_chain(self):
@@ -478,11 +479,8 @@ class HomologicalMinimumCalculator:
 
 
 feature_matrix = np.array(
-    [[0,0,0,0],
-     [0,0,0,1],
-     [0,0,1,0],
-     [0,0,1,1],
-     [0,1,0,0],
+    [[0,0,0],
+     [0,0,1],
     ]
 )
 calculator = HomologicalMinimumCalculator(feature_matrix=feature_matrix)
