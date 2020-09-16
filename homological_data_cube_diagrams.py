@@ -410,6 +410,7 @@ class HomologicalMinimumCalculator(Verbose):
           = 2^n * sum over m: (n choose m)
           = 2^n * (2^n - 1)
           = 2^(2n) - 2^n
+    (some error here)
     '''
     def __init__(self, dimension=None, feature_matrix=np.array([[]]), verbose=True):
         self.verbose = verbose
@@ -424,6 +425,7 @@ class HomologicalMinimumCalculator(Verbose):
         if feature_matrix != np.array([[]]):
             self.set_feature_matrix(feature_matrix)
             self.calculate_projection()
+        self.calculate_minimal_chain()
 
     def set_feature_matrix(self, feature_matrix):
         self.print('Calculating ' + yellow + 'raw data 1-chain' + resetcode + ' (bipartite graph) ...')
@@ -587,7 +589,19 @@ class HomologicalMinimumCalculator(Verbose):
                 self.d[index,:] = v
             return
 
-    def get_minimal_chain(self):
+    def calculate_minimal_chain(self):
+        '''
+        Algorithm:
+        1. Start from raw data relative 1-chain cr.
+        2. Consider simple homologies, the boundaries of all possible 2-simplices which pertain to the support of cr.
+        3. Apply the one which gives the best geometric norm improvement.
+        4. Repeat using the current 1-chain until there is no improvement to be had with this method.
+
+        Implementation tasks:
+        1. Iterator over simple homologies pertaining to a given 1-chain. Should give a 1-chain (2-simplex itself not necessary, I guess).
+        2. Application of a homology to a 1-chain; add to DescriptionChain perhaps. It's just adding, but adding is non-trivial in current sparse representation. Drop 0-coefficiented elements along the way, for example?
+        3. Evaluate all and pick loop.
+        '''
         pass
 
 if __name__=='__main__':
