@@ -1,9 +1,15 @@
+#!/usr/bin/env sage --python
 import itertools
 import numpy as np
 from scipy import sparse
 from scipy import linalg
 from math import sqrt
+import os
 from colors import *
+from sage.all import *
+from sage.modules.free_module_integer import IntegerLattice
+from fpylll import *
+import fpylll
 
 class FacetSignature:
     '''
@@ -34,10 +40,11 @@ class FacetSignature:
         return set(self.signature).issubset(other.signature)
 
     def __str__(self):
-        return ''.join([str(element) if element!= None else '-' for element in self.get_values()])
+        no_char = '\u2592'
+        return ''.join([str(element) if element!= None else no_char for element in self.get_values()])
 
     def __repr__(self):
-        return cyan + str(self) + reset
+        return bb + str(self) + resetcode
 
 
 class Facet:
@@ -106,7 +113,22 @@ class FacetPair:
         return (self.f1.signature_object.signature, self.f2.signature_object.signature)
 
     def __repr__(self):
-        return repr(self.f1) + ' ' + yellow + '\u2192' + reset + '  ' + repr(self.f2)
+        return repr(self.f1) + '' + yellow + '\u2192' + resetcode + '' + repr(self.f2)
+
+
+class FacetTriple:
+    def __init__(self, f1, f2, f3):
+        assert(f1.contained_in(f2))
+        assert(f2.contained_in(f3))
+        self.f1 = f1
+        self.f2 = f2
+        self.f3 = f3
+
+    def get_signature_triple(self):
+        return (self.f1.signature_object.signature, self.f2.signature_object.signature, self.f3.signature_object.signature)
+
+    def __repr__(self):
+        return repr(self.f1) + '' + red + '\u2192' + resetcode + '' + repr(self.f2) + '' + red + '\u2192' + resetcode + '' + repr(self.f3)
 
 
 class DataCube:
@@ -123,7 +145,7 @@ class DataCube:
         self.facets = {}
         self.facets_of_dimension = {i:{} for i in range(n+1)}
         self.signature_objects = {}
-        print('Creating ' + yellow + 'data cube' + reset + ' facet objects.')
+        print('Creating ' + yellow + 'data cube' + resetcode + ' facet objects.')
         self.create_all_sub_facets()
 
     def create_all_sub_facets(self):
@@ -137,7 +159,7 @@ class DataCube:
                 signature = k_subset_faces
                 facet = self.create_facet(dimension=n-len(signature), signature=signature)
                 if(self.verbose):
-                    print(green + 'Creating facet with signature ' + reset + str(signature).ljust(25) + magenta + 'defined by: ' + reset + str(facet).ljust(25) + reset)
+                    print(green + 'Creating facet with signature ' + resetcode + str(signature).ljust(25) + magenta + 'defined by: ' + resetcode + str(facet).ljust(25) + resetcode)
                 self.register_all_direct_parents(facet, signature=signature)
 
     def register_all_direct_parents(self, facet, signature=None):
@@ -240,29 +262,34 @@ class DescriptionChain:
 
     def __repr__(self):
         display_width = max([len(str(coefficient)) for coefficient in self.coefficients.values()])
-        tolerance = self.tolerance
+        # tolerance = self.tolerance
+        tolerance = 0
 
         kv = [item for item in self.coefficients.items()]
         kvs = sorted(kv, key=lambda x: x[1])
 
         significant = [self.cube.get_facet_pair_object(pair) for pair, coefficient in kvs if abs(coefficient) >= tolerance]
         insignificant = [self.cube.get_facet_pair_object(pair) for pair, coefficient in kvs if abs(coefficient) < tolerance]
-        significant = [green + str(self.coefficients[pair.get_signature_pair()]).ljust(display_width+1) + reset + repr(pair) for pair in significant]
-        insignificant = [red + str(self.coefficients[pair.get_signature_pair()]).ljust(display_width+1) + reset + repr(pair) for pair in insignificant]
+        significant = [green + str(self.coefficients[pair.get_signature_pair()]).rjust(display_width) + ' ' + resetcode + repr(pair) for pair in significant]
+        insignificant = [red + str(self.coefficients[pair.get_signature_pair()]).rjust(display_width) + ' ' + resetcode + repr(pair) for pair in insignificant]
 
-        small_message = red + str(len(insignificant)) + reset + ' non-zero coefficients smaller than ' + str(tolerance) + ''
-        show_message = green + str(len(significant)) + reset + ' other non-zero coefficients'
-        norm_message =  yellow + str(self.geometric_norm()) + reset + ' geometric weighted norm'
-        snorm_message =  yellow + str(self.geometric_norm(only_support=True)) + reset + ' geometric weighted norm, support basis vectors only'
-        enorm_message =  yellow + str(self.euclidean_norm()) + reset + ' Euclidean norm'
-        esnorm_message =  cyan + str(self.euclidean_norm(only_support=True)) + reset + ' Euclidean norm, support basis vectors only'
+        small_message = red + str(len(insignificant)) + resetcode + ' non-zero coefficients smaller than ' + str(tolerance) + ''
+        show_message = green + str(len(significant)) + resetcode + ' other non-zero coefficients'
+        norm_message =  yellow + str(self.geometric_norm()) + resetcode + ' geometric weighted norm'
+        snorm_message =  yellow + str(self.geometric_norm(only_support=True)) + resetcode + ' geometric weighted norm, support basis vectors only'
+        enorm_message =  yellow + str(self.euclidean_norm()) + resetcode + ' Euclidean norm'
+        esnorm_message =  cyan + str(self.euclidean_norm(only_support=True)) + resetcode + ' Euclidean norm, support basis vectors only'
         g = [norm_message, snorm_message]
         e = [enorm_message, esnorm_message]
         if self.cube.current_coordinate_system == 'geometric weighted':
             x = e
         if self.cube.current_coordinate_system == 'standard Euclidean':
             x = g
-        return '\n'.join([small_message, show_message] + significant + x)
+        # return '\n'.join([small_message, show_message] + significant + x)
+        truncation = min(len(significant), 40)
+        if truncation != len(significant):
+            significant = significant[0:truncation] + ['...']
+        return '\n'.join(significant)
 
     def copy(self):
         c = DescriptionChain(self.cube)
@@ -353,7 +380,7 @@ class HomologicalMinimumCalculator:
 
     def set_feature_matrix(self, feature_matrix):
         self.cube = DataCube(dimension=feature_matrix.shape[1], verbose=False)
-        print('Determining ' + yellow + 'initial chain' + reset + '.')
+        print('Determining ' + yellow + 'initial chain' + resetcode + '.')
         self.cr = self.cube.get_raw_data_chain(feature_matrix)
         self.projected_cr = self.cr.copy()
 
@@ -390,11 +417,27 @@ class HomologicalMinimumCalculator:
                     count = count + 1
         return [C2_basis_indices, C2_basis]
 
+    def display_C2_basis(self):
+        for signature3 in self.C2_basis.values():
+            print(self.to_triple(signature3))
+
+    def to_triple(self, c2_basis):
+        s1 = c2_basis[0]
+        s2 = c2_basis[1]
+        s3 = c2_basis[2]
+        f = self.cube
+        return FacetTriple(f[s1], f[s2], f[s3])
+
+    def to_1chain(self, vector):
+        c = DescriptionChain(self.cube)
+        c.import_vector(vector, list(self.C1_basis.values()))
+        return c
+
     def calculate_boundaries_lattice(self):
-        print('Calculating ' + yellow + 'C1 basis' + reset + '. ', end='')
+        print('Calculating ' + yellow + 'C1 basis' + resetcode + '. ', end='')
         self.C1_basis_indices, self.C1_basis = self.calculate_C1_basis()
         print(str(len(self.C1_basis)) + ' elements.')
-        print('Calculating ' + yellow + 'C2 basis' + reset + '. ', end='')
+        print('Calculating ' + yellow + 'C2 basis' + resetcode + '. ', end='')
         self.C2_basis_indices, self.C2_basis = self.calculate_C2_basis()
         print(str(len(self.C2_basis)) + ' elements.')
         N = len(self.C1_basis)
@@ -403,7 +446,6 @@ class HomologicalMinimumCalculator:
         c1_index = []
         values = []
         for i in range(K):
-            c2_index = c2_index + [i, i, i]
             c2 = self.C2_basis[i]
             f1 = self.cube[c2[0]]
             f2 = self.cube[c2[1]]
@@ -413,33 +455,85 @@ class HomologicalMinimumCalculator:
             f2f3 = self.C1_basis_indices[f2.pair(f3)]
             f1f3 = self.C1_basis_indices[f1.pair(f3)]
 
+            c2_index = c2_index + [   i,    i,    i]
             c1_index = c1_index + [f1f2, f2f3, f1f3]
-            values = values + [1, 1, -1]
+            values =   values   + [   1,    1,   -1]
 
-        print('Recording ' + yellow + 'boundary operator' + reset + ' entries.')
+        print('Recording ' + yellow + 'boundary operator' + resetcode + ' entries.')
         self.d_sparse = sparse.coo_matrix((np.array(values), (np.array(c1_index), np.array(c2_index))), dtype=float)
-        print('Generating ' + yellow + 'full matrix' + reset + ', of size ' + str(self.d_sparse.shape))
+        print('Generating ' + yellow + 'full matrix' + resetcode + ', of size ' + str(self.d_sparse.shape))
         self.d = self.d_sparse.toarray()
 
+        self.D = matrix(ZZ, self.d.transpose())
+        for i, row in enumerate(self.D):
+            t = self.to_triple(self.C2_basis[i])
+            c1= self.to_1chain(row)
+            print()
+            print('2-cell ' + repr(t) + ' maps to')
+            print(repr(c1))
+            if (i > 10):
+                print('...')
+                break
+        self.I = image(self.D)
+        self.B = self.I.basis()
+
+        print('')
+        print('Basis for image lattice')
+        for i, basis_element in enumerate(self.I.basis()):
+            print('')
+            print(repr(self.to_1chain(basis_element)))
+            if (i > 10):
+                print('...')
+                break
+
         with GeometricWeightedCoordinateChanger(self):
-            print('Calculating ' + yellow + 'projector' + reset + '.')
+            print('Calculating ' + yellow + 'projector' + resetcode + '.')
             ob = linalg.orth(self.d)
             m = np.matmul(ob, ob.transpose())
             self.projector = np.identity(ob.shape[0]) - np.matmul(ob, ob.transpose())
             # self.projector = np.matmul(ob, ob.transpose())
 
-            print('Calculating ' + yellow + 'projection of initial chain' + reset + '.')
+            print('Calculating ' + yellow + 'projection of initial chain' + resetcode + '.')
             all_pairs = self.C1_basis.values()
 
             v = self.cr.to_vector(all_pairs)
             w = np.matmul(self.projector, v)
             self.projected_cr.import_vector(w, all_pairs)
 
-            print('')
-            print('Under geometric norm coordinates:')
-            print(self.cr)
-            print('Return to original.')
-            print('')
+
+            IM = fpylll.fplll.integer_matrix.IntegerMatrix
+
+            # d = calculator.d
+            # e = d.copy()
+            # A = IM(d.shape[0], d.shape[1])
+            B = self.B
+            A = IM(len(B), len(B[0]))
+            # for i in range(d.shape[0]):
+            #     for j in range(d.shape[1]):
+            for i in range(len(B)):
+                for j in range(len(B[0])):
+                    A[i,j] = int(B[i][j])
+                    # A[i,j] = int(calculator.d[i,j])
+            M = GSO.Mat(A)
+            M.update_gso()
+            print(M.get_mu(1,0))
+            L = LLL.Reduction(M, delta=LLL.DEFAULT_DELTA, eta=LLL.DEFAULT_ETA)
+            L()
+            M.update_gso()
+            print(M.get_mu(1,0))
+            # A.to_matrix(e)
+
+            all_pairs = self.C1_basis.values()
+            self.v = tuple([float(element) for element in tuple(self.cr.to_vector(all_pairs))])
+            self.result = CVP.closest_vector(A, self.v)
+
+
+
+            # print('')
+            # print('Under geometric norm coordinates:')
+            # print(self.cr)
+            # print('Return to original.')
+            # print('')
 
         self.truncated = self.projected_cr.truncate_from(self.cr)
 
@@ -452,7 +546,7 @@ class HomologicalMinimumCalculator:
         It is supposed to be used to allow the application of a standardized closest-vector algorithm.
         '''
         if self.cube.current_coordinate_system == system:
-            print(red + 'Warning' + reset + ': Trying to convert back to coordinates - ' + system + '?')
+            print(red + 'Warning' + resetcode + ': Trying to convert back to coordinates - ' + system + '?')
             return
         if system == 'standard Euclidean' and self.cube.current_coordinate_system == 'geometric weighted':
             self.cube.current_coordinate_system = system
@@ -462,10 +556,14 @@ class HomologicalMinimumCalculator:
             for signature_pair, coefficient in self.cr.coefficients.items():
                 norm = sqrt(DescriptionChain.get_basis_norm(self.cube.get_facet_pair_object(signature_pair)))
                 self.projected_cr.coefficients[signature_pair] = coefficient / norm
+            self.Bp = [list(element) for element in self.B]
             for index, signature_pair in self.C1_basis.items():
                 norm = sqrt(DescriptionChain.get_basis_norm(self.cube.get_facet_pair_object(signature_pair)))
                 v = np.multiply(self.d[index,:], 1/norm)
                 self.d[index,:] = v
+                for i in range(len(self.B)):
+                    self.Bp[i][index] = self.B[i][index] * (1/norm)
+            self.B = [tuple(element) for element in self.Bp]
             return
         if system == 'geometric weighted' and self.cube.current_coordinate_system == 'standard Euclidean':
             self.cube.current_coordinate_system = system
@@ -475,16 +573,27 @@ class HomologicalMinimumCalculator:
             for signature_pair, coefficient in self.cr.coefficients.items():
                 norm = sqrt(DescriptionChain.get_basis_norm(self.cube.get_facet_pair_object(signature_pair)))
                 self.projected_cr.coefficients[signature_pair] = coefficient * norm
+            self.Bp = [list(element) for element in self.B]
             for index, signature_pair in self.C1_basis.items():
                 norm = sqrt(DescriptionChain.get_basis_norm(self.cube.get_facet_pair_object(signature_pair)))
                 v = np.multiply(self.d[index,:], norm)
                 self.d[index,:] = v
+                for i in range(len(self.B)):
+                    self.Bp[i][index] = self.B[i][index] * norm
+            self.B = [tuple(element) for element in self.Bp]
             return
 
     def get_minimal_chain(self):
         pass
 
 
+# feature_matrix = np.array(
+#     [[0,0,0,0],
+#      [0,0,0,1],
+#      [0,0,1,1],
+#      [0,1,0,0],
+#     ]
+# )
 feature_matrix = np.array(
     [[0,0,0],
      [0,0,1],
@@ -494,11 +603,43 @@ calculator = HomologicalMinimumCalculator(feature_matrix=feature_matrix)
 print('')
 print(          'Original raw data chain')
 print(calculator.cr)
-print('')
-print('Projected')
-print(calculator.projected_cr)
-print('')
-print('Truncated')
-print(calculator.truncated)
-print('')
+# print('')
+# print('Projected')
+# print(calculator.projected_cr)
+# print('')
+# print('Truncated')
+# print(calculator.truncated)
+# print('')
+
+# from sage.modules.free_module_integer import IntegerLattice
+# from fpylll import *
+# import fpylll
+# IM = fpylll.fplll.integer_matrix.IntegerMatrix
+
+# I = calculator.I
+# B = I.basis()
+# # d = calculator.d
+# # e = d.copy()
+# # A = IM(d.shape[0], d.shape[1])
+# A = IM(len(B), len(B[0]))
+# # for i in range(d.shape[0]):
+# #     for j in range(d.shape[1]):
+# for i in range(len(B)):
+#     for j in range(len(B[0])):
+#         A[i,j] = int(B[i][j])
+#         # A[i,j] = int(calculator.d[i,j])
+# M = GSO.Mat(A)
+# M.update_gso()
+# print(M.get_mu(1,0))
+# L = LLL.Reduction(M, delta=LLL.DEFAULT_DELTA, eta=LLL.DEFAULT_ETA)
+# L()
+# M.update_gso()
+# print(M.get_mu(1,0))
+# # A.to_matrix(e)
+
+# all_pairs = calculator.C1_basis.values()
+# t = tuple([int(element) for element in tuple(calculator.cr.to_vector(all_pairs))])
+
+# result = CVP.closest_vector(A, t)
+
 
