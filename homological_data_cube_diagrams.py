@@ -1,33 +1,100 @@
-#!/usr/bin/env sage --python
+#!/usr/bin/env python3
 import itertools
 import numpy as np
 from scipy import sparse
 from scipy import linalg
 from math import sqrt
 import os
-from colors import *
-from sage.all import *
-from sage.modules.free_module_integer import IntegerLattice
-from fpylll import *
-import fpylll
+from terminal_codes import *
+
+
+class Facet:
+    '''
+    Represents a facet of a given cube.
+    '''
+    def __init__(self, signature_object=None):
+        '''
+        'dimension' is the dimension of the larger cube. This is used to interpret the signature. 
+        'signature_object' is an object of type FacetSignature.
+        This object identifies which facet this is in the context of the given cube.
+        The parents and children are direct only. They are not determined at constructor time because the facet
+        containment data structure is not a tree, so it does not admit of one-shot recursive construction starting
+        from the top element (that would be the usual design pattern for object composition).
+        '''
+        self.signature_object = signature_object
+        self.parents = {}
+        self.children = {}
+
+    def get_dimension(self):
+        return self.signature_object.top_dimension - len(self.signature_object.signature)
+
+    def is_top(self):
+        return self.signature_object.signature == ()
+
+    def contained_in(self, other):
+        return other.signature_object.implies(self.signature_object)
+
+    def register_direct_parent(self, other):
+        '''
+        Used only by DataCube, because DataCube manages placing facets in the context of other facets with
+        respect to containment. And even then, so far this functionality is only used when the full list
+        of subfacets is calculated.
+        '''
+        self.parents[other] = other
+        other._register_direct_child(self)
+
+    def _register_direct_child(self, other):
+        '''
+        Not to be used directly.
+        To be used only by internals of register_direct_parent.
+        This reduces potential for error where a parent relationship is recorded but not the inverse relation.
+        '''
+        self.children[other] = other
+
+    def get_all_parents(self, exclude_self=False):
+        '''
+        Uses recursion, following the links to direct parents, to retrieve a list of all the parent facet objects.
+        The exclude_self flag may be used by the first caller for convenience (it is--obviously--not passed in to
+        the recursions).
+        '''
+        if self.is_top():
+            return []
+        if exclude_self:
+            return list(set(itertools.chain(*[direct_parent.get_all_parents() for direct_parent in self.parents])))
+        else:
+            return [self] + list(itertools.chain(*[direct_parent.get_all_parents() for direct_parent in self.parents]))
+
+    def get_hashable(self):
+        return self.signature_object.get_hashable()
+
+    def __str__(self):
+        return str(self.signature_object)
+
+    def __repr__(self):
+        return repr(self.signature_object)
+
 
 class FacetSignature:
     '''
-    An object to wrap the signature of a facet with behaviors.
-    The signature is a sorted tuple of integers labelling the faces containing the facet.
-    Faces are labelled as follows:
-    - The 0-value face for the i-th feature is i
-    - The 1-value face for the i-th features is i+n
-    Indices start with 0.
+    An object to wrap the (hashable) signature of a facet with behaviors.
     '''
-    def __init__(self, signature, top=None):
+    def __init__(self, signature, top_dimension=None):
+        '''
+        The 'signature' is a sorted tuple of integers labelling the faces containing the facet.
+        Faces are labelled as follows:
+        - The 0-value face for the i-th feature is i
+        - The 1-value face for the i-th features is i+n
+        Indices start with 0.
+        '''
         self.signature = signature
-        self.top = top
+        self.top_dimension = top_dimension
 
     def get_values(self):
-        if self.top == None:
-            return ()
-        n = self.top.dimension
+        '''
+        A 'trinary' vector representing the facet. An entry is 0 or 1 if that coordinate of a vertex is determined
+        by membership in the facet, and None if not.
+        '''
+        n = self.top_dimension
         values = [None for j in range(n)]
         for i in range(n):
             if i in self.signature:
@@ -37,118 +104,104 @@ class FacetSignature:
         return values
 
     def implies(self, other):
+        '''
+        The 'signature' design as a tuple of integers has the benefit that it supports this straightforward
+        method of determining the containment relation.
+        '''
         return set(self.signature).issubset(other.signature)
 
+    def get_hashable(self):
+        return self.signature
+
     def __str__(self):
-        no_char = '\u2592'
+        no_char = ' '
         return ''.join([str(element) if element!= None else no_char for element in self.get_values()])
 
     def __repr__(self):
-        return bb + str(self) + resetcode
-
-
-class Facet:
-    '''
-    Represents a facet of a given cube.
-    signature_object is an object of type FacetSignature.
-    This object identifies which facet this is in the context of the given cube.
-    The parents and children are direct only. They are not determined at constructor
-    time because the facet containment data structure is not a tree, so it does
-    not admit of one-shot recursive construction starting from the top element.
-    '''
-    def __init__(self, dimension=3, signature_object=None):
-        self.dimension = dimension
-        self.signature_object = signature_object
-        self.parents = {}
-        self.children = {}
-
-    def is_top(self):
-        return self.signature_object.signature == ()
-
-    def register_direct_parent(self, other):
-        self.parents[other] = other
-        other._register_direct_child(self)
-
-    def _register_direct_child(self, other):
-        '''
-        To be used only by register_direct_parent.
-        This reduces potential for error where a parent relationship is recorded but not the inverse relation.
-        '''
-        self.children[other] = other
-
-    def contained_in(self, other):
-        return other.signature_object.implies(self.signature_object)
-
-    def get_all_parents(self, exclude_self=False):
-        if self.is_top():
-            return []
-        if exclude_self:
-            return list(set(itertools.chain(*[direct_parent.get_all_parents() for direct_parent in self.parents])))
-        else:
-            return [self] + list(itertools.chain(*[direct_parent.get_all_parents() for direct_parent in self.parents]))
-
-    def pair(self, other):
-        return (self.signature_object.signature, other.signature_object.signature)
-
-    def triple(self, other1, other2):
-        return (self.signature_object.signature, other1.signature_object.signature, other2.signature_object.signature)
-
-    def __str__(self):
-        return str(self.signature_object)
-
-    def __repr__(self):
-        return repr(self.signature_object)
+        return backgroundhighlight + str(self) + resetcode
 
 
 class FacetPair:
     '''
-    Intended to be used as a basis element in the set of 1-chains of the barycentric subdivision of a given cube.
+    Intended to be used as a basis element in the set of 1-chains of the barycentric
+    subdivision of a given polygonal cell complex. (In the current context, an n-cube).
     '''
     def __init__(self, f1, f2):
+        '''
+        The 1-cells of the barycentric subdivision of a polygonal cell complex are labelled
+        by pairs (f1,f2) of cells with f1 < f2 ('<' means 'contained in' here).
+        Provide Facets f1 and f2.
+        '''
         assert(f1.contained_in(f2))
         self.f1 = f1
         self.f2 = f2
 
-    def get_signature_pair(self):
-        return (self.f1.signature_object.signature, self.f2.signature_object.signature)
+    def get_hashable(self):
+        return (self.f1.get_hashable(), self.f2.get_hashable())
 
     def __repr__(self):
-        return repr(self.f1) + '' + yellow + '\u2192' + resetcode + '' + repr(self.f2)
+        return repr(self.f1) + '' + yellow + arrow + resetcode + '' + repr(self.f2)
 
 
 class FacetTriple:
+    '''
+    Intended to be used as a basis element in the set of 2-chains of the barycentric subdivision
+    of a given polygonal cell complex. (In the current context, an n-cube).
+    '''
     def __init__(self, f1, f2, f3):
+        '''
+        The 2-dimensional simplices of the barycentric subdivision of a polygonal cell complex are labelled by a
+        triple (f1,f2, f3) of polygonal cells with f1 < f2 < f3 ('<' means 'contained in' here).
+        Here the usage is for cubical facets. Provide Facets f1, f2, f3.
+        '''
         assert(f1.contained_in(f2))
         assert(f2.contained_in(f3))
         self.f1 = f1
         self.f2 = f2
         self.f3 = f3
 
-    def get_signature_triple(self):
-        return (self.f1.signature_object.signature, self.f2.signature_object.signature, self.f3.signature_object.signature)
+    def get_facets(self):
+        return [self.f1, self.f2, self.f3]
+
+    def get_hashable(self):
+        return (self.f1.get_hashable(), self.f2.get_hashable(), self.f3.get_hashable())
 
     def __repr__(self):
-        return repr(self.f1) + '' + red + '\u2192' + resetcode + '' + repr(self.f2) + '' + red + '\u2192' + resetcode + '' + repr(self.f3)
+        return repr(self.f1) + '' + red + arrow + resetcode + '' + repr(self.f2) + '' + red + arrow + resetcode + '' + repr(self.f3)
 
 
-class DataCube:
+class Verbose:
+    def print(self, message, end='\n'):
+        if self.verbose:
+            print(message, end=end)
+
+
+class DataCube(Verbose):
     '''
     Represents the standard cube complex structure on the cube of a given dimension.
-    Currently it is memory intensive, storing objects for every facet.
-    In the future, there may be a way to create them on the fly as needed.
     '''
-    def __init__(self, dimension=3, verbose=True):
-        self.verbose = verbose
+    def __init__(self, dimension=3, verbose=False):
         self.dimension = dimension
         n = self.dimension
-        assert(n >= 1)
+        self.verbose = verbose
+        assert(n >= 2)
+        self.signature_objects = {}
         self.facets = {}
         self.facets_of_dimension = {i:{} for i in range(n+1)}
-        self.signature_objects = {}
-        print('Creating ' + yellow + 'data cube' + resetcode + ' facet objects.')
-        self.create_all_sub_facets()
+        self.pairs = {}
+        self.triples = {}
+        self.filled_out = False
 
     def create_all_sub_facets(self):
+        '''
+        Creates objects for each facet, and registers all direct containments.
+        Possibly very computationally intensive. Use only if necessary.
+        '''
+        if self.filled_out:
+            return
+        else:
+            self.filled_out = True
+        self.print('Creating ' + yellow + 'data cube' + resetcode + ' facet objects.')
         n = self.dimension
         top = self.create_facet(dimension=n, signature=())
         for k in range(1, n+1):
@@ -158,17 +211,24 @@ class DataCube:
                     continue
                 signature = k_subset_faces
                 facet = self.create_facet(dimension=n-len(signature), signature=signature)
-                if(self.verbose):
-                    print(green + 'Creating facet with signature ' + resetcode + str(signature).ljust(25) + magenta + 'defined by: ' + resetcode + str(facet).ljust(25) + resetcode)
+                self.print(green + 'Creating facet with signature ' + resetcode + str(signature).ljust(25) + magenta + 'defined by: ' + resetcode + str(facet).ljust(25) + resetcode)
                 self.register_all_direct_parents(facet, signature=signature)
 
     def register_all_direct_parents(self, facet, signature=None):
+        '''
+        Wires in a facet object by connecting it to all of the facets, of dimension greater by one,
+        in which it is contained.
+        '''
         for entry in signature:
             truncated = tuple(sorted(list(set(signature).difference(set([entry])))))
             assert(truncated in self.signature_objects.keys())
             facet.register_direct_parent(self.get_facet(truncated))
 
     def check_valid_signature(self, signature):
+        '''
+        Used during comprehensive construction of all facets to select 'signature's that represent non-empty
+        intersections of faces.
+        '''
         n = self.dimension
         for i in range(n):
             if i in signature and i+n in signature:
@@ -177,11 +237,12 @@ class DataCube:
 
     def create_facet(self, dimension=0, signature=()):
         top = None
+        n = self.dimension
         if signature != ():
             top = self.get_facet(())
-        signature_object = FacetSignature(signature=signature, top=top)
+        signature_object = FacetSignature(signature=signature, top_dimension=n)
         self.signature_objects[signature] = signature_object
-        f = Facet(dimension=dimension, signature_object=signature_object)
+        f = Facet(signature_object=signature_object)
         self.facets[signature_object] = f
         self.facets_of_dimension[dimension][signature_object] = f
         return f
@@ -194,11 +255,23 @@ class DataCube:
         signature = tuple(sorted([i if vector[i] == 0 else i+n for i in range(len(vector))]))
         return self.get_facet(signature)
 
-    def __getitem__(self, signature):
-        if signature in self.signature_objects.keys():
-            return self.get_facet(signature)
+    def get_facet_pair(self, f1, f2):
+        pair = FacetPair(f1, f2)
+        key = pair.get_hashable()
+        if key in self.pairs:
+            return self.pairs[key]
         else:
-            return None
+            self.pairs[key] = pair
+            return pair
+
+    def get_facet_triple(self, f1, f2, f3):
+        triple = FacetTriple(f1, f2, f3)
+        key = triple.get_hashable()
+        if key in self.triples:
+            return self.triples[key]
+        else:
+            self.triples[key] = triple
+            return triple
 
     def get_raw_data_chain(self, feature_matrix):
         n = self.dimension
@@ -214,14 +287,6 @@ class DataCube:
                     chain.coefficients[pair] = 1
         return chain
 
-    def get_facet_pair(self, f1, f2):
-        return (f1.signature_object.signature, f2.signature_object.signature)
-
-    def get_facet_pair_object(self, signature_pair):
-        f1 = self[signature_pair[0]]
-        f2 = self[signature_pair[1]]
-        return FacetPair(f1, f2)
-
 
 class DescriptionChain:
     '''
@@ -232,64 +297,6 @@ class DescriptionChain:
     def __init__(self, cube):
         self.cube = cube
         self.coefficients = {}
-        self.tolerance = 0.3
-
-    def get_vertices(self):
-        return list(set([pair.f1 if pair.f1.dimension==0 else None for pair in self.coefficients]))
-
-    def geometric_norm(self, only_support=False):
-        l = 0
-        for pair in self.coefficients:
-            coefficient = self.coefficients[pair]
-            if only_support and coefficient >= self.tolerance:
-                l = l + DescriptionChain.get_basis_norm(self.cube.get_facet_pair_object(pair))
-            else:
-                l = l + coefficient*coefficient * DescriptionChain.get_basis_norm(self.cube.get_facet_pair_object(pair))
-        return sqrt(l)
-
-    def euclidean_norm(self, only_support=False):
-        l = 0
-        for pair in self.coefficients:
-            coefficient = self.coefficients[pair]
-            if only_support and coefficient >= self.tolerance:
-                l = l + 1
-            else:
-                l = l + coefficient*coefficient
-        return sqrt(l)
-
-    def get_basis_norm(pair):
-        return (pair.f2.dimension - pair.f1.dimension)
-
-    def __repr__(self):
-        display_width = max([len(str(coefficient)) for coefficient in self.coefficients.values()])
-        # tolerance = self.tolerance
-        tolerance = 0
-
-        kv = [item for item in self.coefficients.items()]
-        kvs = sorted(kv, key=lambda x: x[1])
-
-        significant = [self.cube.get_facet_pair_object(pair) for pair, coefficient in kvs if abs(coefficient) >= tolerance]
-        insignificant = [self.cube.get_facet_pair_object(pair) for pair, coefficient in kvs if abs(coefficient) < tolerance]
-        significant = [green + str(self.coefficients[pair.get_signature_pair()]).rjust(display_width) + ' ' + resetcode + repr(pair) for pair in significant]
-        insignificant = [red + str(self.coefficients[pair.get_signature_pair()]).rjust(display_width) + ' ' + resetcode + repr(pair) for pair in insignificant]
-
-        small_message = red + str(len(insignificant)) + resetcode + ' non-zero coefficients smaller than ' + str(tolerance) + ''
-        show_message = green + str(len(significant)) + resetcode + ' other non-zero coefficients'
-        norm_message =  yellow + str(self.geometric_norm()) + resetcode + ' geometric weighted norm'
-        snorm_message =  yellow + str(self.geometric_norm(only_support=True)) + resetcode + ' geometric weighted norm, support basis vectors only'
-        enorm_message =  yellow + str(self.euclidean_norm()) + resetcode + ' Euclidean norm'
-        esnorm_message =  cyan + str(self.euclidean_norm(only_support=True)) + resetcode + ' Euclidean norm, support basis vectors only'
-        g = [norm_message, snorm_message]
-        e = [enorm_message, esnorm_message]
-        if self.cube.current_coordinate_system == 'geometric weighted':
-            x = e
-        if self.cube.current_coordinate_system == 'standard Euclidean':
-            x = g
-        # return '\n'.join([small_message, show_message] + significant + x)
-        truncation = min(len(significant), 40)
-        if truncation != len(significant):
-            significant = significant[0:truncation] + ['...']
-        return '\n'.join(significant)
 
     def copy(self):
         c = DescriptionChain(self.cube)
@@ -297,28 +304,62 @@ class DescriptionChain:
             c.coefficients[key] = value
         return c
 
-    def to_vector(self, all_pairs):
-        v = np.zeros(len(all_pairs), dtype=float)
-
-        for i, pair in enumerate(all_pairs):
+    def to_vector(self, basis):
+        pairs = basis.values()
+        v = np.zeros(len(pairs), dtype=float)
+        for i, pair in enumerate(pairs):
             if pair in self.coefficients.keys():
                 v[i] = self.coefficients[pair]
         return v
 
-    def import_vector(self, v, all_pairs):
-        for i, pair in enumerate(all_pairs):
+    def from_vector(v, cube, basis):
+        c = DescriptionChain(cube)
+        pairs = basis.values()
+        for i, pair in enumerate(pairs):
             if v[i] != 0:
-                self.coefficients[pair] = v[i]
-
-    def truncate_from(self, cr):
-        c = self.copy()
-        for key in cr.coefficients:
-            if key in c.coefficients:
-                del c.coefficients[key]
+                c.coefficients[pair] = v[i]
         return c
+
+    def geometric_norm(self, only_support=False):
+        l = 0
+        for pair in self.coefficients:
+            coefficient = self.coefficients[pair]
+            if only_support:
+                l = l + DescriptionChain.get_basis_norm(pair)
+            else:
+                l = l + coefficient*coefficient * DescriptionChain.get_basis_norm(pair)
+        return sqrt(l)
+
+    def euclidean_norm(self, only_support=False):
+        l = 0
+        for pair in self.coefficients:
+            coefficient = self.coefficients[pair]
+            if only_support:
+                l = l + 1
+            else:
+                l = l + coefficient*coefficient
+        return sqrt(l)
+
+    def get_basis_norm(pair):
+        return (pair.f2.get_dimension() - pair.f1.get_dimension())
+
+    def __repr__(self):
+        display_width = max([len(str(coefficient)) for coefficient in self.coefficients.values()])
+        kv = [item for item in self.coefficients.items()]
+        kvs = sorted(kv, key=lambda x: -1*abs(x[1]))
+        lines = [green + str(coefficient).rjust(display_width) + ' ' + resetcode + repr(pair) for pair, coefficient in kvs]
+        truncation = min(len(lines), 15)
+        if truncation != len(lines):
+            lines = lines[0:truncation] + ['...', '\n']
+        return '\n'.join(lines)
 
 
 class GeometricWeightedCoordinateChanger(object):
+    '''
+    A setup-and-tear-down-able class to allow conceptually straightforward
+    performance of operations on the calculator's geometric items in a coordinate
+    system for which the Q norm becomes the Euclidean norm.
+    '''
     def __init__(self, calculator):
         self.calculator = calculator
 
@@ -329,19 +370,19 @@ class GeometricWeightedCoordinateChanger(object):
         self.calculator.change_C1_coordinates('standard Euclidean')
 
 
-class HomologicalMinimumCalculator:
+class HomologicalMinimumCalculator(Verbose):
     '''
-    For a given feature matrix, leading to the 1-chain cr, this calculator attempts to find the element of
-    smallest geometric norm (Q) belonging to the integral homology class of cr relative to the union of the
+    For a given feature matrix, leading to the 1-chain c_raw, this calculator attempts to find the element of
+    smallest geometric norm (Q) belonging to the integral homology class of c_raw relative to the union of the
     sample set (certain vertices of the cube) and the attribute set barycenters.
-    Equivalently, cr plus the closest element of the lattice of boundaries of relative 2-chains to the element -cr.
+    Equivalently, c_raw plus: the closest element of the lattice of boundaries of relative 2-chains to the element -c_raw.
 
     Note that this lattice is independent of the feature matrix. Computations concerning this lattice,
     like short bases, can be performed in advance knowing only the dimension of the cube.
 
     Note also that there is a shortcut heuristic using basic linear algebra, namely to find the intersection
-    of the translation of the plane P spanned by the lattice to cr and the Q-orthogonal complement of P. The
-    resulting point will be close to the sought-after lattice element, but will not typically have integer coefficients.
+    of the translation of the plane P spanned by the lattice to c_raw and the Q-orthogonal complement of subspace P. The
+    resulting point will perhaps be close to the sought-after lattice element, but will not typically have integer coefficients.
 
     To do this last operation, one still needs a basis for the boundaries subspace.
     This can be done as follows. The matrix of the mapping C2(B)->C1(B) consists of rows of the following format.
@@ -352,7 +393,10 @@ class HomologicalMinimumCalculator:
     These coefficients lined up with respect to an ordering of the basis of C1(B) comprises a row vector.
 
     After forming the matrix consisting of the rows as above, one needs a basis for the column space.
-    Use a linear algebra package.
+    ...
+    I tried fpylll, but it was not able to do the CVP as far as I can tell. It seems not to support floating point lattice coordinates or other-vector coordinates.
+    ...
+
     The dimension of C1(B) is equal to the number of pairs (f1, f2), f1 < f2 (excluding cases f1=top and f2=top).
     This dimension can also be calculated as follows:
     Each basis element of C1(B) labels a 1-cell that belongs to a unique open facet of the original standard cube complex.
@@ -366,25 +410,30 @@ class HomologicalMinimumCalculator:
           = 2^n * sum over m: (n choose m)
           = 2^n * (2^n - 1)
           = 2^(2n) - 2^n
-
-    *Future feature request: Implement navigation through basis elements with an iterator.
     '''
     def __init__(self, dimension=None, feature_matrix=np.array([[]]), verbose=True):
+        self.verbose = verbose
         assert(dimension == None or feature_matrix == np.array([[]]))
+        if dimension != None:
+            self.cube = DataCube(dimension=dimension, verbose=verbose)
+        else:
+            self.cube = DataCube(dimension=feature_matrix.shape[1], verbose=False)
+
+        self.cube.current_coordinate_system = 'standard Euclidean'
+        self.calculate_boundary_operator()
         if feature_matrix != np.array([[]]):
             self.set_feature_matrix(feature_matrix)
-        else:
-            self.cube = DataCube(dimension=dimension, verbose=verbose)
-        self.cube.current_coordinate_system = 'standard Euclidean'
-        self.calculate_boundaries_lattice()
+            self.calculate_projection()
 
     def set_feature_matrix(self, feature_matrix):
-        self.cube = DataCube(dimension=feature_matrix.shape[1], verbose=False)
-        print('Determining ' + yellow + 'initial chain' + resetcode + '.')
-        self.cr = self.cube.get_raw_data_chain(feature_matrix)
-        self.projected_cr = self.cr.copy()
+        self.print('Calculating ' + yellow + 'raw data 1-chain' + resetcode + ' (bipartite graph) ...')
+        self.c_raw = self.cube.get_raw_data_chain(feature_matrix)
+        self.print(self.c_raw)
+        self.print('')
+        self.projected_c_raw = self.c_raw.copy()
 
     def calculate_C1_basis(self):
+        self.cube.create_all_sub_facets()
         C1_basis_indices = {}
         C1_basis = {}
         n = self.cube.dimension
@@ -394,12 +443,14 @@ class HomologicalMinimumCalculator:
             parents = f1.get_all_parents(exclude_self=True)
             for parent in parents:
                 f2 = parent
-                C1_basis_indices[f1.pair(f2)] = count
-                C1_basis[count] = f1.pair(f2)
+                pair = self.cube.get_facet_pair(f1,f2)
+                C1_basis_indices[pair] = count
+                C1_basis[count] = pair
                 count = count + 1
         return [C1_basis_indices, C1_basis]
 
     def calculate_C2_basis(self):
+        self.cube.create_all_sub_facets()
         C2_basis_indices = {}
         C2_basis = {}
         n = self.cube.dimension
@@ -412,14 +463,21 @@ class HomologicalMinimumCalculator:
                 parents2 = f2.get_all_parents(exclude_self=True)
                 for parent2 in parents2:
                     f3 = parent2
-                    C2_basis_indices[f1.triple(f2, f3)] = count
-                    C2_basis[count] = f1.triple(f2, f3)
+                    # C2_basis_indices[f1.triple(f2, f3)] = count
+                    # C2_basis[count] = f1.triple(f2, f3)
+                    triple = self.cube.get_facet_triple(f1, f2, f3)
+                    C2_basis_indices[triple] = count
+                    C2_basis[count] = triple
                     count = count + 1
         return [C2_basis_indices, C2_basis]
 
+    def display_C1_basis(self):
+        for basis_element in self.C1_basis.values():
+            self.print(basis_element)
+
     def display_C2_basis(self):
-        for signature3 in self.C2_basis.values():
-            print(self.to_triple(signature3))
+        for basis_element in self.C2_basis.values():
+            self.print(basis_element)
 
     def to_triple(self, c2_basis):
         s1 = c2_basis[0]
@@ -430,16 +488,18 @@ class HomologicalMinimumCalculator:
 
     def to_1chain(self, vector):
         c = DescriptionChain(self.cube)
-        c.import_vector(vector, list(self.C1_basis.values()))
+        c.import_vector(vector, self.C1_basis)
         return c
 
-    def calculate_boundaries_lattice(self):
-        print('Calculating ' + yellow + 'C1 basis' + resetcode + '. ', end='')
+    def calculate_boundary_operator(self):
+        self.print('')
+        self.print(yellow + 'B' + resetcode + ' = barycentric simplicial subdivision of boundary of standard ' + str(self.cube.dimension) + '-cube')
+        self.print('Calculating ' + yellow + 'C\u2081B' + resetcode + ' (degeneracies excluded) ... ', end='')
         self.C1_basis_indices, self.C1_basis = self.calculate_C1_basis()
-        print(str(len(self.C1_basis)) + ' elements.')
-        print('Calculating ' + yellow + 'C2 basis' + resetcode + '. ', end='')
+        self.print(green + str(len(self.C1_basis)) + resetcode + ' elements')
+        self.print('Calculating ' + yellow + 'C\u2082B' + resetcode + ' (degeneracies excluded) ... ', end='')
         self.C2_basis_indices, self.C2_basis = self.calculate_C2_basis()
-        print(str(len(self.C2_basis)) + ' elements.')
+        self.print(green + str(len(self.C2_basis)) + resetcode + ' elements')
         N = len(self.C1_basis)
         K = len(self.C2_basis)
         c2_index = []
@@ -447,95 +507,47 @@ class HomologicalMinimumCalculator:
         values = []
         for i in range(K):
             c2 = self.C2_basis[i]
-            f1 = self.cube[c2[0]]
-            f2 = self.cube[c2[1]]
-            f3 = self.cube[c2[2]]
+            f1, f2, f3 = c2.get_facets()
 
-            f1f2 = self.C1_basis_indices[f1.pair(f2)]
-            f2f3 = self.C1_basis_indices[f2.pair(f3)]
-            f1f3 = self.C1_basis_indices[f1.pair(f3)]
+            f1f2 = self.C1_basis_indices[self.cube.get_facet_pair(f1,f2)]
+            f2f3 = self.C1_basis_indices[self.cube.get_facet_pair(f2,f3)]
+            f1f3 = self.C1_basis_indices[self.cube.get_facet_pair(f1,f3)]
 
             c2_index = c2_index + [   i,    i,    i]
             c1_index = c1_index + [f1f2, f2f3, f1f3]
             values =   values   + [   1,    1,   -1]
 
-        print('Recording ' + yellow + 'boundary operator' + resetcode + ' entries.')
+        self.print('Calculating ' + yellow + 'boundary operator ' + resetcode + magenta + roundd + yellow + ': C\u2082B ' + arrow + ' C\u2081B' + resetcode + ' ...')
+
         self.d_sparse = sparse.coo_matrix((np.array(values), (np.array(c1_index), np.array(c2_index))), dtype=float)
-        print('Generating ' + yellow + 'full matrix' + resetcode + ', of size ' + str(self.d_sparse.shape))
         self.d = self.d_sparse.toarray()
 
-        self.D = matrix(ZZ, self.d.transpose())
-        for i, row in enumerate(self.D):
-            t = self.to_triple(self.C2_basis[i])
-            c1= self.to_1chain(row)
-            print()
-            print('2-cell ' + repr(t) + ' maps to')
-            print(repr(c1))
-            if (i > 10):
-                print('...')
-                break
-        self.I = image(self.D)
-        self.B = self.I.basis()
-
-        print('')
-        print('Basis for image lattice')
-        for i, basis_element in enumerate(self.I.basis()):
-            print('')
-            print(repr(self.to_1chain(basis_element)))
-            if (i > 10):
-                print('...')
+        for i in self.C2_basis:
+            basis_element = self.C2_basis[i]
+            c1= DescriptionChain.from_vector(self.d[:,i], self.cube, self.C1_basis)
+            self.print('')
+            self.print(magenta + roundd + resetcode + '(' + repr(basis_element) + ') =')
+            self.print(repr(c1))
+            if (i > 5):
+                self.print('...')
+                self.print('')
                 break
 
+    def calculate_projection(self):
         with GeometricWeightedCoordinateChanger(self):
-            print('Calculating ' + yellow + 'projector' + resetcode + '.')
+            self.print(yellow + 'Q' + resetcode + ' = quadratic form on C\u2081B induced by geometric length of 1-cells')
+            self.print('')
+            self.print('Calculating ' + yellow + 'projector' + resetcode + ' ...')
             ob = linalg.orth(self.d)
             m = np.matmul(ob, ob.transpose())
             self.projector = np.identity(ob.shape[0]) - np.matmul(ob, ob.transpose())
-            # self.projector = np.matmul(ob, ob.transpose())
-
-            print('Calculating ' + yellow + 'projection of initial chain' + resetcode + '.')
-            all_pairs = self.C1_basis.values()
-
-            v = self.cr.to_vector(all_pairs)
+            self.print(self.projector)
+            self.print('')
+            self.print('Calculating ' + yellow + 'Q-orthogonal projection' + resetcode + ' of raw data 1-chain into Q-complement of ' + yellow + 'Image(' + roundd + ')' + resetcode + ' ...')
+            v = self.c_raw.to_vector(self.C1_basis)
             w = np.matmul(self.projector, v)
-            self.projected_cr.import_vector(w, all_pairs)
-
-
-            IM = fpylll.fplll.integer_matrix.IntegerMatrix
-
-            # d = calculator.d
-            # e = d.copy()
-            # A = IM(d.shape[0], d.shape[1])
-            B = self.B
-            A = IM(len(B), len(B[0]))
-            # for i in range(d.shape[0]):
-            #     for j in range(d.shape[1]):
-            for i in range(len(B)):
-                for j in range(len(B[0])):
-                    A[i,j] = int(B[i][j])
-                    # A[i,j] = int(calculator.d[i,j])
-            M = GSO.Mat(A)
-            M.update_gso()
-            print(M.get_mu(1,0))
-            L = LLL.Reduction(M, delta=LLL.DEFAULT_DELTA, eta=LLL.DEFAULT_ETA)
-            L()
-            M.update_gso()
-            print(M.get_mu(1,0))
-            # A.to_matrix(e)
-
-            all_pairs = self.C1_basis.values()
-            self.v = tuple([float(element) for element in tuple(self.cr.to_vector(all_pairs))])
-            self.result = CVP.closest_vector(A, self.v)
-
-
-
-            # print('')
-            # print('Under geometric norm coordinates:')
-            # print(self.cr)
-            # print('Return to original.')
-            # print('')
-
-        self.truncated = self.projected_cr.truncate_from(self.cr)
+            self.projected_c_raw = DescriptionChain.from_vector(w, self.cube, self.C1_basis)
+            self.print(self.projected_c_raw)
 
     def change_C1_coordinates(self, system):
         '''
@@ -550,96 +562,46 @@ class HomologicalMinimumCalculator:
             return
         if system == 'standard Euclidean' and self.cube.current_coordinate_system == 'geometric weighted':
             self.cube.current_coordinate_system = system
-            for signature_pair, coefficient in self.cr.coefficients.items():
-                norm = sqrt(DescriptionChain.get_basis_norm(self.cube.get_facet_pair_object(signature_pair)))
-                self.cr.coefficients[signature_pair] = coefficient / norm
-            for signature_pair, coefficient in self.cr.coefficients.items():
-                norm = sqrt(DescriptionChain.get_basis_norm(self.cube.get_facet_pair_object(signature_pair)))
-                self.projected_cr.coefficients[signature_pair] = coefficient / norm
-            self.Bp = [list(element) for element in self.B]
-            for index, signature_pair in self.C1_basis.items():
-                norm = sqrt(DescriptionChain.get_basis_norm(self.cube.get_facet_pair_object(signature_pair)))
+            for pair, coefficient in self.c_raw.coefficients.items():
+                norm = sqrt(DescriptionChain.get_basis_norm(pair))
+                self.c_raw.coefficients[pair] = coefficient / norm
+            for pair, coefficient in self.c_raw.coefficients.items():
+                norm = sqrt(DescriptionChain.get_basis_norm(pair))
+                self.projected_c_raw.coefficients[pair] = coefficient / norm
+            for index, pair in self.C1_basis.items():
+                norm = sqrt(DescriptionChain.get_basis_norm(pair))
                 v = np.multiply(self.d[index,:], 1/norm)
                 self.d[index,:] = v
-                for i in range(len(self.B)):
-                    self.Bp[i][index] = self.B[i][index] * (1/norm)
-            self.B = [tuple(element) for element in self.Bp]
             return
         if system == 'geometric weighted' and self.cube.current_coordinate_system == 'standard Euclidean':
             self.cube.current_coordinate_system = system
-            for signature_pair, coefficient in self.cr.coefficients.items():
-                norm = sqrt(DescriptionChain.get_basis_norm(self.cube.get_facet_pair_object(signature_pair)))
-                self.cr.coefficients[signature_pair] = coefficient * norm
-            for signature_pair, coefficient in self.cr.coefficients.items():
-                norm = sqrt(DescriptionChain.get_basis_norm(self.cube.get_facet_pair_object(signature_pair)))
-                self.projected_cr.coefficients[signature_pair] = coefficient * norm
-            self.Bp = [list(element) for element in self.B]
-            for index, signature_pair in self.C1_basis.items():
-                norm = sqrt(DescriptionChain.get_basis_norm(self.cube.get_facet_pair_object(signature_pair)))
+            for pair, coefficient in self.c_raw.coefficients.items():
+                norm = sqrt(DescriptionChain.get_basis_norm(pair))
+                self.c_raw.coefficients[pair] = coefficient * norm
+            for pair, coefficient in self.c_raw.coefficients.items():
+                norm = sqrt(DescriptionChain.get_basis_norm(pair))
+                self.projected_c_raw.coefficients[pair] = coefficient * norm
+            for index, pair in self.C1_basis.items():
+                norm = sqrt(DescriptionChain.get_basis_norm(pair))
                 v = np.multiply(self.d[index,:], norm)
                 self.d[index,:] = v
-                for i in range(len(self.B)):
-                    self.Bp[i][index] = self.B[i][index] * norm
-            self.B = [tuple(element) for element in self.Bp]
             return
 
     def get_minimal_chain(self):
         pass
 
+if __name__=='__main__':
+    feature_matrix = np.array(
+        [[0,0,0],
+         [0,0,1],
+         # [0,1,0],
+        ]
+    )
+    calculator = HomologicalMinimumCalculator(feature_matrix=feature_matrix)
 
-# feature_matrix = np.array(
-#     [[0,0,0,0],
-#      [0,0,0,1],
-#      [0,0,1,1],
-#      [0,1,0,0],
-#     ]
-# )
-feature_matrix = np.array(
-    [[0,0,0],
-     [0,0,1],
-    ]
-)
-calculator = HomologicalMinimumCalculator(feature_matrix=feature_matrix)
-print('')
-print(          'Original raw data chain')
-print(calculator.cr)
-# print('')
-# print('Projected')
-# print(calculator.projected_cr)
-# print('')
-# print('Truncated')
-# print(calculator.truncated)
-# print('')
+    for n in range(8):
+        print(str(n) + ' ' + str(pow(2,n)*(pow(2,n)-2)))
 
-# from sage.modules.free_module_integer import IntegerLattice
-# from fpylll import *
-# import fpylll
-# IM = fpylll.fplll.integer_matrix.IntegerMatrix
-
-# I = calculator.I
-# B = I.basis()
-# # d = calculator.d
-# # e = d.copy()
-# # A = IM(d.shape[0], d.shape[1])
-# A = IM(len(B), len(B[0]))
-# # for i in range(d.shape[0]):
-# #     for j in range(d.shape[1]):
-# for i in range(len(B)):
-#     for j in range(len(B[0])):
-#         A[i,j] = int(B[i][j])
-#         # A[i,j] = int(calculator.d[i,j])
-# M = GSO.Mat(A)
-# M.update_gso()
-# print(M.get_mu(1,0))
-# L = LLL.Reduction(M, delta=LLL.DEFAULT_DELTA, eta=LLL.DEFAULT_ETA)
-# L()
-# M.update_gso()
-# print(M.get_mu(1,0))
-# # A.to_matrix(e)
-
-# all_pairs = calculator.C1_basis.values()
-# t = tuple([int(element) for element in tuple(calculator.cr.to_vector(all_pairs))])
-
-# result = CVP.closest_vector(A, t)
-
-
+    # kv = [item for item in calculator.C1_basis.items()]
+    # kvs = sorted(kv, key=lambda x: x[1].get_hashable())
+    # vs = [kv[1] for kv in kvs]

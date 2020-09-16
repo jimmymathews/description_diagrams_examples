@@ -6,4 +6,6 @@ cyan = '\u001b[1;36m'
 red = '\u001b[1;31m'
 resetcode = '\u001b[0m'
 
-bb = '\u001b[1;46m\u001b[1;93m'
+backgroundhighlight = '\u001b[1;46m\u001b[1;93m'
+arrow = '\u2192 '
+roundd = '\u2202'
