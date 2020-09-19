@@ -488,15 +488,25 @@ class DescriptionChain:
     def get_basis_norm(pair):
         return (pair.f2.get_dimension() - pair.f1.get_dimension())
 
-    def __repr__(self):
+    def color_line(self, pair):
+        return green if pair.f1.get_dimension() > 0 else magenta
+
+    def representation(self, omit_vertices=False):
         display_width = max([len(str(coefficient)) for coefficient in self.coefficients.values()])
         kv = [item for item in self.coefficients.items()]
         kvs = sorted(kv, key=lambda x: -1*abs(x[1]))
-        lines = [green + str(coefficient).rjust(display_width) + ' ' + resetcode + repr(pair) for pair, coefficient in kvs]
-        truncation = min(len(lines), 15)
+        if not omit_vertices:
+            lines = [self.color_line(pair) + str(coefficient).rjust(display_width) + ' ' + resetcode + repr(pair) for pair, coefficient in kvs]
+        else:
+            lines = [self.color_line(pair) + str(coefficient).rjust(display_width) + ' ' + resetcode + repr(pair) for pair, coefficient in kvs if pair.f1.get_dimension()>0]
+        # truncation = min(len(lines), 25)
+        truncation = len(lines)
         if truncation != len(lines):
             lines = lines[0:truncation] + ['...', '\n']
         return '\n'.join(lines)
+
+    def __repr__(self):
+        return self.representation()
 
     def get_raw_data_chain(feature_matrix, cube):
         '''
@@ -675,8 +685,8 @@ class HomologicalMinimumCalculator(Verbose):
 
 if __name__=='__main__':
     feature_matrix = np.array(
-        [[0,0,0],
-         [0,0,1],
+        [[0,0,0,0],
+         [0,0,0,1],
         ]
     )
     calculator = HomologicalMinimumCalculator(feature_matrix=feature_matrix)
