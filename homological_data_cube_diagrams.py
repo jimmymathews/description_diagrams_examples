@@ -3,10 +3,22 @@ import itertools
 import numpy as np
 from scipy import sparse
 from scipy import linalg
+import matplotlib.pyplot as plt
 from math import sqrt
 import os
 from terminal_codes import *
 
+import matplotlib
+gui_env = ['TKAgg','GTKAgg','Qt4Agg','WXAgg']
+for gui in gui_env:
+    try:
+        print("Testing: " + str(gui))
+        matplotlib.use(gui,warn=False, force=True)
+        from matplotlib import pyplot as plt
+        break
+    except:
+        continue
+print("Using: " + str(matplotlib.get_backend()))
 
 class Facet:
     '''
@@ -465,15 +477,21 @@ class DescriptionChain:
                 c.coefficients[pair] = v[i]
         return c
 
-    def geometric_norm(self, only_support=False):
+    def geometric_norm(self, only_support=False, p=2):
         l = 0
         for pair in self.coefficients:
             coefficient = self.coefficients[pair]
             if only_support:
                 l = l + DescriptionChain.get_basis_norm(pair)
             else:
-                l = l + coefficient*coefficient * DescriptionChain.get_basis_norm(pair)
-        return sqrt(l)
+                if p == 2:
+                    l = l + coefficient*coefficient * DescriptionChain.get_basis_norm(pair)
+                elif p == 1:
+                    l = l + abs(coefficient) * DescriptionChain.get_basis_norm(pair)
+        if p == 2:
+            return sqrt(l)
+        elif p == 1:
+            return l
 
     def euclidean_norm(self, only_support=False):
         l = 0
@@ -491,22 +509,35 @@ class DescriptionChain:
     def color_line(self, pair):
         return green if pair.f1.get_dimension() > 0 else magenta
 
-    def representation(self, omit_vertices=False):
+    def representation(self, emphasize_non_vertices=False):
         display_width = max([len(str(coefficient)) for coefficient in self.coefficients.values()])
         kv = [item for item in self.coefficients.items()]
+        kv0 = [item for item in self.coefficients.items() if item[0].f1.get_dimension() > 0]
         kvs = sorted(kv, key=lambda x: -1*abs(x[1]))
-        if not omit_vertices:
-            lines = [self.color_line(pair) + str(coefficient).rjust(display_width) + ' ' + resetcode + repr(pair) for pair, coefficient in kvs]
-        else:
-            lines = [self.color_line(pair) + str(coefficient).rjust(display_width) + ' ' + resetcode + repr(pair) for pair, coefficient in kvs if pair.f1.get_dimension()>0]
+        kvs0 = sorted(kv0, key=lambda x: -1*abs(x[1]))
+        # if not omit_vertices:
+        lines = [self.color_line(pair) + str(coefficient).rjust(display_width) + ' ' + resetcode + repr(pair) for pair, coefficient in kvs]
+        # else:
+            # lines = [self.color_line(pair) + str(coefficient).rjust(display_width) + ' ' + resetcode + repr(pair) for pair, coefficient in kvs0]
         # truncation = min(len(lines), 25)
-        truncation = len(lines)
-        if truncation != len(lines):
-            lines = lines[0:truncation] + ['...', '\n']
+        # truncation = len(lines)
+        # if truncation != len(lines):
+        #     lines = lines[0:truncation] + ['...', '\n']
+        if emphasize_non_vertices:
+            top10 = kvs0[0:(min(10, len(kvs0)))]
+            top10 = [self.color_line(pair) + str(coefficient).rjust(display_width) + ' ' + resetcode + repr(pair) for pair, coefficient in top10]
+            lines = lines + ['\n', '...', '\n', 'Non-trivial top 10'] + top10
         return '\n'.join(lines)
 
     def __repr__(self):
         return self.representation()
+
+    def plot_histogram(self):
+        fig, axs = plt.subplots(1, 2)
+        fig.suptitle('distribution of coefficients of 1-chain (resp. excl. vertex-sourced basis elements)')
+        axs[0].hist(list(self.coefficients.values()), color = 'blue', edgecolor = 'black', bins = int(50))
+        axs[1].hist([coefficient for pair, coefficient in self.coefficients.items() if pair.f1.get_dimension()>0], color = 'green', edgecolor = 'black', bins = int(50))
+        plt.show()
 
     def get_raw_data_chain(feature_matrix, cube):
         '''
@@ -627,6 +658,7 @@ class HomologicalMinimumCalculator(Verbose):
             w = np.matmul(self.projector, v)
             self.projected_c_raw = DescriptionChain.from_vector(w, self.cube)
             self.print(self.projected_c_raw)
+        return self.projected_c_raw
 
     def change_C1_coordinates(self, system):
         '''
@@ -683,12 +715,70 @@ class HomologicalMinimumCalculator(Verbose):
         '''
         pass
 
+
+class Examples:
+    def single_merge():
+        feature_matrix = np.array(
+            [[0,0,0],
+             [0,0,1],
+            ]
+        )
+        calculator = HomologicalMinimumCalculator(feature_matrix=feature_matrix)
+        d = calculator.cube.get_d()
+        p = calculator.calculate_projection()
+        print(p.representation(emphasize_non_vertices=True))
+        calculator.projected_c_raw.plot_histogram()
+        return calculator
+
+    def higher_dimension_single_merge(dimension=4):
+        feature_matrix = np.array(
+            [[0 for i in range(dimension-1)] + [0],
+             [0 for i in range(dimension-1)] + [1],
+            ]
+        )
+        calculator = HomologicalMinimumCalculator(feature_matrix=feature_matrix)
+        d = calculator.cube.get_d()
+        p = calculator.calculate_projection()
+        print(p.representation(emphasize_non_vertices=True))
+        calculator.projected_c_raw.plot_histogram()
+        return calculator
+
+    def more_points():
+        feature_matrix = np.array(
+            [[0,0,0,0],
+             [0,0,0,1],
+             [0,0,1,0],
+             [0,0,1,1],
+             [0,1,0,0],
+             [1,0,0,0],
+             [1,1,0,0],
+            ]
+        )
+        calculator = HomologicalMinimumCalculator(feature_matrix=feature_matrix)
+        d = calculator.cube.get_d()
+        p = calculator.calculate_projection()
+        print(p.representation(emphasize_non_vertices=True))
+        calculator.projected_c_raw.plot_histogram()
+        return calculator
+
+    def cluster():
+        feature_matrix = np.array(
+            [[0,0,1,0,1],
+             [0,0,1,1,0],
+             [0,0,0,1,1],
+            ]
+        )
+        calculator = HomologicalMinimumCalculator(feature_matrix=feature_matrix)
+        d = calculator.cube.get_d()
+        p = calculator.calculate_projection()
+        print(p.representation(emphasize_non_vertices=True))
+        calculator.projected_c_raw.plot_histogram()
+        return calculator
+
 if __name__=='__main__':
-    feature_matrix = np.array(
-        [[0,0,0,0],
-         [0,0,0,1],
-        ]
-    )
-    calculator = HomologicalMinimumCalculator(feature_matrix=feature_matrix)
-    calculator.cube.calculate_boundary_operator()
-    calculator.calculate_projection()
+    Ex = Examples
+    # Ex.single_merge()
+    # Ex.higher_dimension_single_merge()
+    # Ex.more_points()
+    Ex.cluster()
+
