@@ -395,9 +395,9 @@ class DataCube(Verbose):
     def calculate_boundary_operator(self):
         self.print('')
         self.print(yellow + 'B' + resetcode + ' = barycentric simplicial subdivision of boundary of standard ' + str(self.dimension) + '-cube')
-        self.print('Calculating ' + yellow + 'C\u2081B' + resetcode + ' (degeneracies excluded) ... ', end='')
+        self.print('Calculating ' + yellow + 'C\u2081B' + resetcode + ' (degeneracies excluded) ... ')
         self.print(green + str(len(self.get_C1_basis())) + resetcode + ' elements')
-        self.print('Calculating ' + yellow + 'C\u2082B' + resetcode + ' (degeneracies excluded) ... ', end='')
+        self.print('Calculating ' + yellow + 'C\u2082B' + resetcode + ' (degeneracies excluded) ... ')
         self.print(green + str(len(self.get_C2_basis())) + resetcode + ' elements')
         N = len(self.get_C1_basis())
         K = len(self.get_C2_basis())
@@ -680,3 +680,5 @@ if __name__=='__main__':
         ]
     )
     calculator = HomologicalMinimumCalculator(feature_matrix=feature_matrix)
+    calculator.cube.calculate_boundary_operator()
+    calculator.calculate_projection()
