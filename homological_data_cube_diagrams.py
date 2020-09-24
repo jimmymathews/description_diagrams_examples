@@ -45,22 +45,6 @@ class Facet:
     def contained_in(self, other):
         return other.signature_object.implies(self.signature_object)
 
-    # def register_direct_parent(self, other):
-    #     '''
-    #     Used only by DataCube, because DataCube manages placing facets in the context of other facets with
-    #     respect to containment. And even then, so far this functionality is only used when the full list
-    #     of subfacets is calculated.
-    #     '''
-    #     self.parents[other] = other
-    #     other._register_direct_child(self)
-
-    # def _register_direct_child(self, other):
-    #     '''
-    #     Not to be used directly.
-    #     To be used only by internals of register_direct_parent.
-    #     This reduces potential for error where a parent relationship is recorded but not the inverse relation.
-    #     '''
-    #     self.children[other] = other
     def get_cube(self):
         return self.signature_object.cube
 
@@ -779,6 +763,6 @@ if __name__=='__main__':
     Ex = Examples
     # Ex.single_merge()
     # Ex.higher_dimension_single_merge()
-    # Ex.more_points()
-    Ex.cluster()
+    Ex.more_points()
+    # Ex.cluster()
 
