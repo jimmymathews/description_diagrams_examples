@@ -1,4 +1,4 @@
-# Tools for attempted solutions of the data-cube Steiner problem (and visualization of the results in the 3d case?).
+### Tools for attempted solutions of the data-cube Steiner problem (and visualization of the results in the 3d case?).
 
 Basic functionality can be tested with:
 
