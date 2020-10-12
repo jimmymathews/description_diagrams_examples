@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 from homological_data_cube_diagrams import *
+from stochastic_description_diagrams import *
 
 class Examples:
     def single_merge():
@@ -61,9 +62,32 @@ class Examples:
         calculator.projected_c_raw.plot_histogram()
         return calculator
 
+    def stochastic_cluster():
+        feature_matrix = np.array(
+            [[0,0,1,0,1],
+             [0,0,1,1,0],
+             [0,0,0,1,1],
+            ]
+        )
+        sim = StochasticDescriptionDiagrams(feature_matrix = feature_matrix)
+
+    def stochastic_higher_dimension(dimension = 4):
+        feature_matrix = np.array(
+            [[0 for i in range(dimension-1)] + [0],
+             [0 for i in range(dimension-1)] + [1],
+            ]
+        )
+        sim = StochasticDescriptionDiagrams(feature_matrix = feature_matrix)
+
+
+
 if __name__=='__main__':
     Ex = Examples
     # Ex.single_merge()
     # Ex.higher_dimension_single_merge()
-    Ex.more_points()
+    # Ex.more_points()
     # Ex.cluster()
+    # Ex.stochastic_higher_dimension(dimension=6)
+    Ex.stochastic_cluster()
+
+

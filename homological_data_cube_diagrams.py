@@ -8,17 +8,17 @@ from math import sqrt
 import os
 from terminal_codes import *
 
-import matplotlib
-gui_env = ['TKAgg','GTKAgg','Qt4Agg','WXAgg']
-for gui in gui_env:
-    try:
-        print("Testing: " + str(gui))
-        matplotlib.use(gui,warn=False, force=True)
-        from matplotlib import pyplot as plt
-        break
-    except:
-        continue
-print("Using: " + str(matplotlib.get_backend()))
+# import matplotlib
+# gui_env = ['TKAgg','GTKAgg','Qt4Agg','WXAgg']
+# for gui in gui_env:
+#     try:
+#         print("Testing: " + str(gui))
+#         matplotlib.use(gui,warn=False, force=True)
+#         from matplotlib import pyplot as plt
+#         break
+#     except:
+#         continue
+# print("Using: " + str(matplotlib.get_backend()))
 
 class Facet:
     '''
@@ -92,8 +92,25 @@ class Facet:
     def __str__(self):
         return str(self.signature_object)
 
+    def representation(self, emphasis = None):
+        if emphasis == None:
+            return repr(self.signature_object)
+        else:
+            no_char = ' '
+            vals = self.signature_object.get_values()
+            svals = [str(element) if element!=None else no_char for element in vals]
+            tvals = [element if not i in emphasis else emph + element + backgroundhighlight for i, element in enumerate(svals)]
+            ss = ''.join([str(element) if element!= None else no_char for i, element in enumerate(tvals)])
+            return backgroundhighlight + ''.join(tvals) + resetcode
+
     def __repr__(self):
-        return repr(self.signature_object)
+        return self.representation()
+
+    def __eq__(self, other):
+        return self.get_hashable() == other.get_hashable()
+
+    def get_signature(self):
+        return self.signature_object.signature
 
 
 class FacetSignature:
@@ -273,13 +290,16 @@ class DataCube(Verbose):
         self.facets_of_dimension[dimension][signature_object] = f
         return f
 
-    def get_facet(self, signature):
+    def get_facet(self, signature, forgetful=False):
         '''
         Factory pattern for creating a facet of the cube on the fly.
         '''
-        if not signature in self.signature_objects:
-            self.create_facet(dimension=self.dimension-len(signature), signature=signature)
-        return self.facets[self.signature_objects[signature]]            
+        if not forgetful:
+            if not signature in self.signature_objects:
+                self.create_facet(dimension=self.dimension-len(signature), signature=signature)
+            return self.facets[self.signature_objects[signature]]            
+        else:
+            return Facet(signature_object=FacetSignature(signature=signature, cube=self))
 
     def get_vertex(self, vector):
         '''

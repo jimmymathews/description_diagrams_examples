@@ -9,3 +9,8 @@ resetcode = '\u001b[0m'
 backgroundhighlight = '\u001b[1;46m\u001b[1;93m'
 arrow = '\u2192 '
 roundd = '\u2202'
+
+up_line     = '\u001b[1A'
+clear_line  = '\u001b[K'
+emph = '\u001b[1;101m\u001b[1;93m'
+
