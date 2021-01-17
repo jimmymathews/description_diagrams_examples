@@ -23,7 +23,7 @@ What's going on is:
 
 1. An initial set of vertices of a cube of a given dimension is chosen, for the purpose of the example ('single merge' is 2 adjacent vertices on a standard, 3-dimensional cube; 'more points' is two groups of 4 vertices, each group the set of 4 vertices on a square in a 4-cube.).
 2. The "real-coefficients homological" approach is used to determine a heuristically-optimal graph-ical description of the vertex set.
-3. In this approach, the initial vertex set determines a 1-chain `c_raw` in the barycentric subdivision of the cube.
+3. In this approach, the initial vertex set determines a 1-chain `c_raw` in the barycentric subdivision of the cube. This works by drawing in straight edges connecting each vertex to the center of each face containing that vertex.
 4. The geometric length on the cube surface defines a norm on the 1-chains space.
 5. We calculate the member of the homology class of `c_raw` of minimal norm (like a harmonic form).
 
