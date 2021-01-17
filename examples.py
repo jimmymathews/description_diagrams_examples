@@ -14,6 +14,9 @@ class Examples:
         d = calculator.cube.get_d()
         p = calculator.calculate_projection()
         print(p.representation(emphasize_non_vertices=True))
+        print('')
+        print('Original raw-data 1-chain')
+        print(calculator.c_raw)
         return calculator
 
     def higher_dimension_single_merge(dimension=4):
@@ -79,9 +82,9 @@ class Examples:
 
 if __name__=='__main__':
     Ex = Examples
-    # Ex.single_merge()
+    Ex.single_merge()
     # Ex.higher_dimension_single_merge()
-    Ex.more_points()
+    # Ex.more_points()
     # Ex.cluster()
     # Ex.stochastic_higher_dimension(dimension=6)
     # Ex.stochastic_cluster()
