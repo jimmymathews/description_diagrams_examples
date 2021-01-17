@@ -159,7 +159,7 @@ class StochasticDescriptionDiagrams(Verbose):
                 strand.random_mutation()
             self.display()
             try:
-                time.sleep(0.05)
+                time.sleep(0.01)
             except KeyboardInterrupt:
                 print()
                 return

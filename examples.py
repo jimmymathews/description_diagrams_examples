@@ -14,7 +14,6 @@ class Examples:
         d = calculator.cube.get_d()
         p = calculator.calculate_projection()
         print(p.representation(emphasize_non_vertices=True))
-        calculator.projected_c_raw.plot_histogram()
         return calculator
 
     def higher_dimension_single_merge(dimension=4):
@@ -27,7 +26,6 @@ class Examples:
         d = calculator.cube.get_d()
         p = calculator.calculate_projection()
         print(p.representation(emphasize_non_vertices=True))
-        calculator.projected_c_raw.plot_histogram()
         return calculator
 
     def more_points():
@@ -45,7 +43,6 @@ class Examples:
         d = calculator.cube.get_d()
         p = calculator.calculate_projection()
         print(p.representation(emphasize_non_vertices=True))
-        calculator.projected_c_raw.plot_histogram()
         return calculator
 
     def cluster():
@@ -59,7 +56,6 @@ class Examples:
         d = calculator.cube.get_d()
         p = calculator.calculate_projection()
         print(p.representation(emphasize_non_vertices=True))
-        calculator.projected_c_raw.plot_histogram()
         return calculator
 
     def stochastic_cluster():
@@ -85,9 +81,9 @@ if __name__=='__main__':
     Ex = Examples
     # Ex.single_merge()
     # Ex.higher_dimension_single_merge()
-    # Ex.more_points()
+    Ex.more_points()
     # Ex.cluster()
     # Ex.stochastic_higher_dimension(dimension=6)
-    Ex.stochastic_cluster()
+    # Ex.stochastic_cluster()
 
 

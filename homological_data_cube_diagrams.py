@@ -109,6 +109,9 @@ class Facet:
     def __eq__(self, other):
         return self.get_hashable() == other.get_hashable()
 
+    def __hash__(self):
+    	return self.get_hashable().__hash__()
+
     def get_signature(self):
         return self.signature_object.signature
 
