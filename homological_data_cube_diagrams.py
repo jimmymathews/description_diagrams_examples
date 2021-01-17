@@ -8,17 +8,6 @@ from math import sqrt
 import os
 from terminal_codes import *
 
-# import matplotlib
-# gui_env = ['TKAgg','GTKAgg','Qt4Agg','WXAgg']
-# for gui in gui_env:
-#     try:
-#         print("Testing: " + str(gui))
-#         matplotlib.use(gui,warn=False, force=True)
-#         from matplotlib import pyplot as plt
-#         break
-#     except:
-#         continue
-# print("Using: " + str(matplotlib.get_backend()))
 
 class Facet:
     '''
@@ -27,7 +16,7 @@ class Facet:
     def __init__(self, signature_object=None):
         '''
         'signature_object' is an object of type FacetSignature.
-        This object identifies which facet this is in the context of the given cube.
+        It identifies which facet this is in the context of the given cube.
         The parents and children are direct only. They are not determined at constructor time because the facet
         containment data structure is not a tree, so it does not admit of one-shot recursive construction starting
         from the top element (that would be the usual design pattern for object composition).
@@ -49,6 +38,12 @@ class Facet:
         return self.signature_object.cube
 
     def get_direct_parents(self):
+        '''
+        Constructs the list of other Facet objects representing the direct parents of this one.
+        It works by going to the FacetSignature level, i.e. the list of hyperplanes containing
+        this Facet. It removes each hyperplane one by one, and records the resulting Facet of dimension
+        1 higher than this one.
+        '''
         signature = self.signature_object.signature
         parents = []
         for entry in signature:
@@ -57,6 +52,9 @@ class Facet:
         return parents
 
     def get_all_parents(self, exclude_self=False):
+        '''
+        The more-than-direct version of get_direct_parents. Uses get_direct_parents recursively.
+        '''
         if self.is_top():
             return []
         if exclude_self:
@@ -65,6 +63,10 @@ class Facet:
             return [self] + list(itertools.chain(*[direct_parent.get_all_parents() for direct_parent in self.get_direct_parents()]))
 
     def get_direct_children(self):
+        '''
+        Gets the direct children of the given Facet (i.e. Facet objects of one dimension less), using
+        the opposite strategy as get_direct_parents.
+        '''
         signature = self.signature_object.signature
         parents = []
         n = self.signature_object.top_dimension
@@ -84,6 +86,10 @@ class Facet:
             return [self] + list(itertools.chain(*[direct_parent.get_all_children() for direct_parent in self.get_direct_children()]))
 
     def is_vertex(self):
+        '''
+        Returns True or False depending on whether this Facet object represents one of the vertices of
+        the given cube, or instead one of the higher-dimensional facets.
+        '''
         return self.signature_object.is_vertex()
 
     def get_hashable(self):
@@ -110,7 +116,7 @@ class Facet:
         return self.get_hashable() == other.get_hashable()
 
     def __hash__(self):
-    	return self.get_hashable().__hash__()
+        return self.get_hashable().__hash__()
 
     def get_signature(self):
         return self.signature_object.signature
@@ -516,14 +522,20 @@ class DescriptionChain:
     def color_line(self, pair):
         return green if pair.f1.get_dimension() > 0 else magenta
 
+    def pretty_num(self, c):
+        if c == int(c):
+            return int(c)
+        else:
+            return c
+
     def representation(self, emphasize_non_vertices=False):
-        display_width = max([len(str(coefficient)) for coefficient in self.coefficients.values()])
+        display_width = max([len(str(self.pretty_num(coefficient))) for coefficient in self.coefficients.values()])
         kv = [item for item in self.coefficients.items()]
         kv0 = [item for item in self.coefficients.items() if item[0].f1.get_dimension() > 0]
         kvs = sorted(kv, key=lambda x: -1*abs(x[1]))
         kvs0 = sorted(kv0, key=lambda x: -1*abs(x[1]))
         # if not omit_vertices:
-        lines = [self.color_line(pair) + str(coefficient).rjust(display_width) + ' ' + resetcode + repr(pair) for pair, coefficient in kvs]
+        lines = [self.color_line(pair) + str(self.pretty_num(coefficient)).rjust(display_width) + ' ' + resetcode + repr(pair) for pair, coefficient in kvs]
         # else:
             # lines = [self.color_line(pair) + str(coefficient).rjust(display_width) + ' ' + resetcode + repr(pair) for pair, coefficient in kvs0]
         # truncation = min(len(lines), 25)
@@ -533,7 +545,7 @@ class DescriptionChain:
         if emphasize_non_vertices:
             top10 = kvs0[0:(min(10, len(kvs0)))]
             top10 = [self.color_line(pair) + str(coefficient).rjust(display_width) + ' ' + resetcode + repr(pair) for pair, coefficient in top10]
-            lines = lines + ['\n', '...', '\n', 'Non-trivial top 10'] + top10
+            lines = lines + ['\n', '...', '\n', 'Non-trivial top 10 support 1-simplices in ' + yellow + 'Q' + resetcode + '-optimal representative of 1-homology class of raw-data 1-chain', '(original-vertex-sourced 1-simplices excluded; facet-center-sourced 1-simplices included)'] + top10
         return '\n'.join(lines)
 
     def __repr__(self):
@@ -638,7 +650,7 @@ class HomologicalMinimumCalculator(Verbose):
         self.cube.current_coordinate_system = 'standard Euclidean'
         if feature_matrix != np.array([[]]):
             self.set_feature_matrix(feature_matrix)
-        self.calculate_minimal_chain()
+        self.calculate_minimal_chain() # Unimplemented
 
     def set_feature_matrix(self, feature_matrix):
         self.print('Calculating ' + yellow + 'raw data 1-chain' + resetcode + ' (bipartite graph) ...')
