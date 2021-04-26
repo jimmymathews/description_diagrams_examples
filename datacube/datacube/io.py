@@ -1,9 +1,45 @@
 import networkx as nx
 import matplotlib
 matplotlib.use('agg')
+import pandas as pd
+import numpy as np
 import matplotlib.pyplot as plot
 
 from .data_structures import DescriptionDiagram
+from .log_formats import colorized_logger
+logger = colorized_logger(__name__)
+
+def binary_matrix_from_file(filename):
+    df = pd.read_csv(filename, header=None, keep_default_na=False)
+    if any([not is_floatable(entry) for entry in df.iloc[0]]):
+        row0 = list([str(entry) for entry in df.iloc[0]])
+        if len(row0) == len(set(row0)):
+            if row0[0] == '':
+                row0[0] = 'unnamed column possibly row names'
+            df.columns = row0
+            df = df.iloc[[i for i in range(df.shape[0]) if i != 0]]
+        else:
+            logger.error('First row contains non-numeric data, but values are not column names because of non-uniqueness.')
+            return None
+    colname0 = df.columns[0]
+    if any([not is_floatable(entry) for entry in df[colname0]]):
+        col0 = list([str(entry) for entry in df[colname0]])
+        if len(col0) == len(set(col0)):
+            df.index = col0
+            df = df[[df.columns[i] for i in range(df.shape[1]) if i != 0]]
+        else:
+            logger.error('First column contains non-numeric data, but values are not row names because of non-uniqueness.')
+            return None
+    threshold = np.vectorize(lambda x: 1 if x >= 0.5 else 0)
+    matrix = threshold(df.astype(float).to_numpy())
+    return matrix
+
+def is_floatable(value):
+    try:
+        f_value = float(value)
+        return True
+    except ValueError:
+        return False
 
 def bipartite_diagram_representation_of_feature_matrix(points):
     graph = nx.DiGraph()
