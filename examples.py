@@ -82,11 +82,11 @@ class Examples:
 
 if __name__=='__main__':
     Ex = Examples
-    Ex.single_merge()
+    # Ex.single_merge()
     # Ex.higher_dimension_single_merge()
     # Ex.more_points()
     # Ex.cluster()
-    # Ex.stochastic_higher_dimension(dimension=6)
+    Ex.stochastic_higher_dimension(dimension=6)
     # Ex.stochastic_cluster()
 
 
