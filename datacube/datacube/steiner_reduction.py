@@ -54,7 +54,7 @@ class StrandEnrichedHomologyAssessor(ProgressingTask):
         self.diagram = diagram
         super().__init__()
 
-    def find_best_homology(self):
+    def find_best_homology(self, priority='aggregation'):
         best_length_change = 0
         best_strand_aggregation_change = 0
         best_homology = None
@@ -95,16 +95,30 @@ class StrandEnrichedHomologyAssessor(ProgressingTask):
 
             if length_change == 0 and strand_aggregation_change != 0:
                 null_homologies.append(homology)
-            if length_change < best_length_change:
+
+            if priority == 'length':
+                pair = (length_change, -1*strand_aggregation_change)
+                best_pair = (best_length_change, -1*best_strand_aggregation_change)
+
+            if priority == 'aggregation':
+                pair = (-1*strand_aggregation_change, length_change)
+                best_pair = (-1*best_strand_aggregation_change, best_length_change)
+
+            if pair < best_pair:
+                best_homology = homology
                 best_length_change = length_change
                 best_strand_aggregation_change = strand_aggregation_change
-                ties = [homology]
-            elif length_change == best_length_change:
-                if strand_aggregation_change < best_strand_aggregation_change:
-                    best_strand_aggregation_change = strand_aggregation_change
-                    ties = [homology]
-                elif strand_aggregation_change == best_strand_aggregation_change:
-                    ties.append(homology)
+
+            # if length_change < best_length_change:
+            #     best_length_change = length_change
+            #     best_strand_aggregation_change = strand_aggregation_change
+            #     ties = [homology]
+            # elif length_change == best_length_change:
+            #     if strand_aggregation_change < best_strand_aggregation_change:
+            #         best_strand_aggregation_change = strand_aggregation_change
+            #         ties = [homology]
+            #     elif strand_aggregation_change == best_strand_aggregation_change:
+            #         ties.append(homology)
 
         if best_length_change == 0:
             if len(null_homologies) > 0:
@@ -113,16 +127,15 @@ class StrandEnrichedHomologyAssessor(ProgressingTask):
                     str(len(null_homologies)),
                 )
                 best_homology = null_homologies[random.randint(0, len(null_homologies)-1)]
-        else:
-            logger.info('Success, got better length change: %s', best_length_change)
-
-            if len(ties) > 1:
-                best_homology = ties[random.randint(0, len(ties)-1)]
-                logger.info('Still, got ties. Choosing from among %s ties randomly.', len(ties))
-            elif len(ties) == 1:
-                best_homology = ties[0]
-            elif len(ties) == 0:
-                logger.error('No option found')
+        # else:
+        #     logger.info('Success, got better length change: %s', best_length_change)
+            # if len(ties) > 1:
+            #     best_homology = ties[random.randint(0, len(ties)-1)]
+            #     logger.info('Still, got ties. Choosing from among %s ties randomly.', len(ties))
+            # elif len(ties) == 1:
+            #     best_homology = ties[0]
+            # elif len(ties) == 0:
+            #     logger.error('No option found')
 
         return {
             'Length improvement' : abs(best_length_change),
@@ -203,10 +216,17 @@ class SteinerReduction(DescriptionDiagramMutator, ProgressingTask):
         diagram_crawler = StrandEnrichedHomologyAssessor(diagram)
         for listener in self.get_progress_listeners():
             diagram_crawler.add_progress_listener(listener)
-        best_option = diagram_crawler.find_best_homology()
+
+        best_option = diagram_crawler.find_best_homology(priority='aggregation')
         while best_option['Homology'] is not None:
             self.apply(best_option, diagram)
-            best_option = diagram_crawler.find_best_homology()
+            best_option = diagram_crawler.find_best_homology(priority='aggregation')
+
+        best_option = diagram_crawler.find_best_homology(priority='length')
+        while best_option['Homology'] is not None:
+            self.apply(best_option, diagram)
+            best_option = diagram_crawler.find_best_homology(priority='length')
+
 
     def apply(self, basis_option, diagram):
         homology = basis_option['Homology']
@@ -247,6 +267,9 @@ class SteinerReduction(DescriptionDiagramMutator, ProgressingTask):
             if not graph.has_edge(s1, s3):
                 graph.add_edge(s1, s3)
             graph.edges[s1, s3]['supports feature inference'] = new_ss13
-        logger.info('Number of nodes: %s', len(graph.nodes))
-        logger.info('Number of edges: %s', len(graph.edges))
-        logger.info('Total length: %s', diagram.compute_length())
+        logger.info(
+            'Number of nodes, number of edges, and total length: %s, %s, %s',
+            len(graph.nodes),
+            len(graph.edges),
+            diagram.compute_length(),
+        )

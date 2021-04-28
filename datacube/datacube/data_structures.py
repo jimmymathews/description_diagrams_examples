@@ -26,6 +26,17 @@ class Facet:
     def __gt__(self, other):
         return set(self.signature) < set(other.signature)
 
+    def get_binary_vector_string(self):
+        entries = []
+        for i in range(self.dimension):
+            if i in self.signature:
+                entries.append('1')
+            elif i + self.dimension in self.signature:
+                entries.append('0')
+            else:
+                entries.append('-')
+        return ''.join(entries)
+
 
 class DescriptionDiagram:
     def __init__(self, dimension):

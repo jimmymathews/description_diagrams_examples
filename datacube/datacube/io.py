@@ -77,15 +77,19 @@ def save_preview_visualization(filename, diagram):
     signatures = [node for node in graph]
     color_map = [color_by_signature(signature, diagram.dimension) for signature in signatures]
     figure = plot.figure(dpi=200)
-    nx.draw(
+    graph_prettier = nx.relabel.relabel_nodes(
         graph,
+        {signature: diagram.facet(signature).get_binary_vector_string() for signature in signatures},
+    )
+    nx.draw(
+        graph_prettier,
         node_color=color_map,
         ax=figure.add_subplot(111),
         with_labels=True,
         arrowsize=7,
         node_size=125,
         font_size=5,
-        pos=nx.fruchterman_reingold_layout(graph, scale=2, k=0.5)
+        pos=nx.fruchterman_reingold_layout(graph_prettier, scale=2, k=0.5)
     )
     figure.savefig(filename)
 
