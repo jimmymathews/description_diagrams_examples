@@ -1,3 +1,4 @@
+
 import networkx as nx
 import matplotlib
 matplotlib.use('agg')
@@ -5,11 +6,25 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plot
 
-from .data_structures import DescriptionDiagram
 from .log_formats import colorized_logger
 logger = colorized_logger(__name__)
 
 def binary_matrix_from_file(filename):
+    """
+    Will treat first row as column names if there is at least one
+    non-numeric entry in this row.
+    Only in case column names are present, this function will then treat the
+    first column as row names if there is at least one non-numeric entry in
+    this column. (That is, column names must be present if row names are present).
+
+    Args:
+        filename (str):
+            File containing a CSV-formatted matrix.
+
+    Returns:
+        matrix (numpy.ndarray):
+            A binary Numpy matrix.
+    """
     df = pd.read_csv(filename, header=None, keep_default_na=False)
     if any([not is_floatable(entry) for entry in df.iloc[0]]):
         row0 = list([str(entry) for entry in df.iloc[0]])
@@ -19,7 +34,9 @@ def binary_matrix_from_file(filename):
             df.columns = row0
             df = df.iloc[[i for i in range(df.shape[0]) if i != 0]]
         else:
-            logger.error('First row contains non-numeric data, but values are not column names because of non-uniqueness.')
+            logger.error(
+                'First row contains non-numeric data, but values are not column names because of non-uniqueness.'
+            )
             return None
     colname0 = df.columns[0]
     if any([not is_floatable(entry) for entry in df[colname0]]):
@@ -28,7 +45,9 @@ def binary_matrix_from_file(filename):
             df.index = col0
             df = df[[df.columns[i] for i in range(df.shape[1]) if i != 0]]
         else:
-            logger.error('First column contains non-numeric data, but values are not row names because of non-uniqueness.')
+            logger.error(
+                'First column contains non-numeric data, but values are not row names because of non-uniqueness.'
+            )
             return None
     threshold = np.vectorize(lambda x: 1 if x >= 0.5 else 0)
     matrix = threshold(df.astype(float).to_numpy())
@@ -40,30 +59,6 @@ def is_floatable(value):
         return True
     except ValueError:
         return False
-
-def bipartite_diagram_representation_of_feature_matrix(points):
-    graph = nx.DiGraph()
-    dimension = points.shape[1]
-    feature_index = lambda index, value: index + (1-int(value))*dimension
-    signatures_unsorted = [[feature_index(i, v) for i, v in enumerate(row)] for row in points]
-    signatures = list(set([tuple(sorted(signature)) for signature in signatures_unsorted]))
-    diagram = DescriptionDiagram(dimension = dimension)
-    point_facets = [diagram.facet(signature) for signature in signatures]
-    feature_facets = [diagram.facet((j,)) for j in range(2*dimension)]
-    facets = point_facets + feature_facets
-    graph.add_nodes_from([facet.signature for facet in facets])
-    for point in point_facets:
-        for entry in point.signature:
-            feature_signature = tuple(sorted(set([entry])))
-            feature = diagram.facet(feature_signature)
-            if point < feature:
-                p = point.signature
-                f = feature.signature
-                graph.add_edge(p, f)
-                p_is_in_f = (p, f)
-                graph.edges[p, f]['supports feature inference'] = [p_is_in_f]
-    diagram.set_graph(graph)
-    return diagram
 
 def color_by_signature(signature, dimension):
     if len(signature) == dimension:

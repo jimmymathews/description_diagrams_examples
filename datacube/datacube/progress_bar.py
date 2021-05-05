@@ -84,7 +84,7 @@ class ProgressingTask:
     def __init__(self):
         self.listeners = []
 
-    def add_progress_listener(self, listener):
+    def add_progress_listener(self, listener: ProgressBar=None):
         self.listeners.append(listener)
 
     def get_progress_listeners(self):

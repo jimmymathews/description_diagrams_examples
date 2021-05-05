@@ -3,11 +3,10 @@ from os.path import basename
 import enum
 from enum import Enum, auto
 
-import numpy as np
 import networkx as nx
 
 from .io import binary_matrix_from_file
-from .io import bipartite_diagram_representation_of_feature_matrix
+from .matrix_to_graph import bipartite_diagram_representation_of_feature_matrix
 from .regularization import RandomResolutionOfBipartite
 from .steiner_reduction import SteinerReduction
 from .progress_bar import ProgressBar
@@ -37,7 +36,7 @@ class ModelingPipeline:
         if self.interactive:
             progress_bar = ProgressBar()
             for mutation_step in mutation_steps:
-                mutation_step.add_progress_listener(progress_bar)
+                mutation_step.add_progress_listener(listener=progress_bar)
         diagram = bipartite_diagram_representation_of_feature_matrix(points)
         for mutation_step in mutation_steps:
             mutation_step.mutate(diagram)
