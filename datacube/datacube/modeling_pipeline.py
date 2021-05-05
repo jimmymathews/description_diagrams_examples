@@ -30,7 +30,14 @@ class ModelingPipeline:
         self.interactive = interactive
 
     def run(self):
+        mutation_steps = self.get_mutation_steps()
         points = self.gather_input()
+        diagram = bipartite_diagram_representation_of_feature_matrix(points)
+        for step in mutation_steps:
+            step.mutate(diagram)
+        self.send_to_output(diagram)
+
+    def get_mutation_steps(self):
         random_resolver = RandomResolutionOfBipartite()
         reducer = SteinerReduction()
         annotator = DiagramAnnotator()
@@ -39,10 +46,6 @@ class ModelingPipeline:
             progress_bar = ProgressBar()
             for step in mutation_steps:
                 step.add_progress_listener(listener=progress_bar)
-        diagram = bipartite_diagram_representation_of_feature_matrix(points)
-        for step in mutation_steps:
-            step.mutate(diagram)
-        self.send_to_output(diagram)
 
     def gather_input(self):
         if type(self.input) == str:
