@@ -25,6 +25,18 @@ class ModelingPipeline:
         output_formats=[OutputFormats.GRAPHML, OutputFormats.PNG],
         interactive=False
     ):
+    """
+    Args:
+        input (str or matrix-like):
+            If a string, this should be the filename of a file containing
+            a binary feature matrix (possibly with column/row names).
+
+        output_formats (datacube.modeling_pipeline.OutputFormats):
+            Specifies where to send output.
+
+        interactive (boolean):
+            Indicates whether to allow printing to the terminal.
+    """
         self.input = input
         self.output_formats = output_formats
         self.interactive = interactive
@@ -38,10 +50,11 @@ class ModelingPipeline:
         self.send_to_output(diagram)
 
     def get_mutation_steps(self):
-        random_resolver = RandomResolutionOfBipartite()
-        reducer = SteinerReduction()
-        annotator = DiagramAnnotator()
-        mutation_steps = [random_resolver, reducer, annotator]
+        mutation_steps = [
+            RandomResolutionOfBipartite(),
+            SteinerReduction(),
+            DiagramAnnotator(),
+        ]
         if self.interactive:
             progress_bar = ProgressBar()
             for step in mutation_steps:
