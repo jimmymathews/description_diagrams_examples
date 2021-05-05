@@ -7,7 +7,7 @@ from .log_formats import colorized_logger
 logger = colorized_logger(__name__)
 
 
-class RandomResolutionOfBipartite(DescriptionDiagramMutator, ProgressingTask):
+class RandomResolutionOfBipartite(DescriptionDiagramMutator):
     def __init__(self):
         super().__init__()
 

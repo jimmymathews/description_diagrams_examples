@@ -159,7 +159,7 @@ class StrandEnrichedHomologyAssessor(ProgressingTask):
         return length_change, strand_aggregation_change
 
 
-class SteinerReduction(DescriptionDiagramMutator, ProgressingTask):
+class SteinerReduction(DescriptionDiagramMutator):
     def __init__(self):
         super().__init__()
 
@@ -231,9 +231,3 @@ class SteinerReduction(DescriptionDiagramMutator, ProgressingTask):
             if not graph.has_edge(s1, s3):
                 graph.add_edge(s1, s3)
             graph.edges[s1, s3]['supports feature inference'] = new_ss13
-        # logger.info(
-        #     'Number of nodes, number of edges, and total length: %s, %s, %s',
-        #     len(graph.nodes),
-        #     len(graph.edges),
-        #     diagram.compute_length(),
-        # )
