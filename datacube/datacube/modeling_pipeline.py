@@ -21,22 +21,22 @@ class OutputFormats(Enum):
 
 class ModelingPipeline:
     def __init__(self,
-        input,
-        output_formats=[OutputFormats.GRAPHML, OutputFormats.PNG],
-        interactive=False
-    ):
-    """
-    Args:
-        input (str or matrix-like):
-            If a string, this should be the filename of a file containing
-            a binary feature matrix (possibly with column/row names).
+            input,
+            output_formats=[OutputFormats.GRAPHML, OutputFormats.PNG],
+            interactive=False,
+        ):
+        """
+        Args:
+            input (str or matrix-like):
+                If a string, this should be the filename of a file containing
+                a binary feature matrix (possibly with column/row names).
 
-        output_formats (datacube.modeling_pipeline.OutputFormats):
-            Specifies where to send output.
+            output_formats (datacube.modeling_pipeline.OutputFormats):
+                Specifies where to send output.
 
-        interactive (boolean):
-            Indicates whether to allow printing to the terminal.
-    """
+            interactive (boolean):
+                Indicates whether to allow printing to the terminal.
+        """
         self.input = input
         self.output_formats = output_formats
         self.interactive = interactive
@@ -59,6 +59,7 @@ class ModelingPipeline:
             progress_bar = ProgressBar()
             for step in mutation_steps:
                 step.add_progress_listener(listener=progress_bar)
+        return mutation_steps
 
     def gather_input(self):
         if type(self.input) == str:

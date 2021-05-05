@@ -97,4 +97,8 @@ class ProgressingTask:
                 task_description = task_description,
             )
 
+    def declare_task_finished(self):
+        for listener in self.listeners:
+            listener.terminate_report()
+
 

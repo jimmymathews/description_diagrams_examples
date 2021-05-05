@@ -1,21 +1,99 @@
 import random
 import math
+import enum
+from enum import Enum, auto
 
 import networkx as nx
-import numpy as np
 
 from .diagram_mutation import DescriptionDiagramMutator
-from .progress_bar import ProgressingTask
 from .log_formats import colorized_logger
 logger = colorized_logger(__name__)
 
 
-class StrandEnrichedHomologyAssessor(ProgressingTask):
+class StrandHomologyPriority(Enum):
+    AGGREGATION = auto()
+    TOTAL_LENGTH = auto()
+
+
+class SteinerReduction(DescriptionDiagramMutator):
+    def __init__(self):
+        super().__init__()
+
+    def mutate(self, diagram):
+        self.minimize_cubical_length_in_spanning_class(diagram)
+
+    def minimize_cubical_length_in_spanning_class(self, diagram):
+        self.do_local_discrete_gradient_descent(diagram)
+
+    def do_local_discrete_gradient_descent(self, diagram):
+        self.optimize(diagram, priority = StrandHomologyPriority.AGGREGATION)
+        self.optimize(diagram, priority = StrandHomologyPriority.TOTAL_LENGTH)
+        self.declare_task_finished()
+
+    def optimize(self, diagram, priority: StrandHomologyPriority=None):
+        diagram_crawler = StrandEnrichedHomologyAssessor(diagram)
+        best_option = diagram_crawler.find_best_homology(priority=priority)
+        while best_option['Homology'] is not None:
+            self.record_progress(
+                expected_total = None,
+                task_description = str(diagram.compute_length()),
+            )
+            self.apply_homology(best_option, diagram)
+            best_option = diagram_crawler.find_best_homology(priority=priority)
+            isolated = list(nx.isolates(diagram.graph))
+            diagram.graph.remove_nodes_from(isolated)
+
+    def get_simplex_vertex(self, index, e):
+        for i, j in e.keys():
+            if i == index:
+                return e[(i,j)][0]
+            if j == index:
+                return e[(i,j)][1]
+
+    def apply_homology(self, basis_option, diagram):
+        homology = basis_option['Homology']
+        D = lambda index: tuple(sorted(set([0,1,2]).difference(set([index]))))
+        e = {
+            (0,1) : homology[0],
+            (1,2) : homology[1],
+            (0,2) : homology[2],
+        }
+        f = {i : diagram.facet(self.get_simplex_vertex(i, e)) for i in [0,1,2]}
+        s = {i : f[i].signature for i in [0,1,2]}
+        supp = {(i,j) : diagram.get_spanning_support(s[i], s[j]) for i, j in [(0,1), (1,2), (0,2)]}
+        movable_strands = list(set(supp[(0,1)]).intersection(set(supp[(1,2)])))
+        if len(movable_strands) == 0:
+            logger.error('This homology can not be applied, no strands in common.')
+
+        strand_alteration = {
+            (0,1) : (lambda x, y: x.difference(y)),
+            (1,2) : (lambda x, y: x.difference(y)),
+            (0,2) : (lambda x, y: x.union(y)),
+        }
+        new_supp = {
+            (i,j) : list(strand_alteration[(i,j)](set(supp[(i,j)]), set(movable_strands))) for i, j in [(0,1), (1,2), (0,2)]
+        }
+
+        graph = diagram.graph
+        for k in [0,1,2]:
+            i, j = D(k)
+            if len(new_supp[(i,j)]) == 0:
+                graph.remove_edge(s[i], s[j])
+
+        for k in [0,1,2]:
+            i, j = D(k)
+            if len(new_supp[(i,j)]) > 0:
+                if not graph.has_edge(s[i], s[j]):
+                    graph.add_edge(s[i], s[j])
+                graph.edges[s[i], s[j]]['supports feature inference'] = new_supp[(i,j)]
+
+
+class StrandEnrichedHomologyAssessor:
     def __init__(self, diagram):
         self.diagram = diagram
         super().__init__()
 
-    def find_best_homology(self, priority='aggregation'):
+    def find_best_homology(self, priority: StrandHomologyPriority=None):
         best_length_change = 0
         best_strand_aggregation_change = 0
         best_homology = None
@@ -23,10 +101,6 @@ class StrandEnrichedHomologyAssessor(ProgressingTask):
         ties = []
         triples = self.get_triples()
         for f1, f2, f3 in triples:
-            # self.record_progress(
-            #     expected_total = len(triples),
-            #     task_description = 'Considering each basis homology.',
-            # )
             ss12 = self.diagram.get_spanning_support(f1.signature, f2.signature)
             ss23 = self.diagram.get_spanning_support(f2.signature, f3.signature)
             ss13 = self.diagram.get_spanning_support(f1.signature, f3.signature)
@@ -57,11 +131,11 @@ class StrandEnrichedHomologyAssessor(ProgressingTask):
             if length_change == 0 and strand_aggregation_change != 0:
                 null_homologies.append(homology)
 
-            if priority == 'length':
+            if priority == StrandHomologyPriority.TOTAL_LENGTH:
                 pair = (length_change, -1*strand_aggregation_change)
                 best_pair = (best_length_change, -1*best_strand_aggregation_change)
 
-            if priority == 'aggregation':
+            if priority == StrandHomologyPriority.AGGREGATION:
                 pair = (-1*strand_aggregation_change, length_change)
                 best_pair = (-1*best_strand_aggregation_change, best_length_change)
 
@@ -157,77 +231,3 @@ class StrandEnrichedHomologyAssessor(ProgressingTask):
         strand_aggregation_after = max([len(new_ss12), len(new_ss23), len(new_ss13)])
         strand_aggregation_change = strand_aggregation_after - strand_aggregation_before
         return length_change, strand_aggregation_change
-
-
-class SteinerReduction(DescriptionDiagramMutator):
-    def __init__(self):
-        super().__init__()
-
-    def mutate(self, diagram):
-        self.L0 = diagram.compute_length()
-        self.E0 = len(diagram.graph.edges)
-        self.minimize_cubical_length_in_spanning_class(diagram)
-        isolated = list(nx.isolates(diagram.graph))
-        diagram.graph.remove_nodes_from(isolated)
-
-    def minimize_cubical_length_in_spanning_class(self, diagram):
-        self.do_local_discrete_gradient_descent(diagram)
-
-    def do_local_discrete_gradient_descent(self, diagram):
-        diagram_crawler = StrandEnrichedHomologyAssessor(diagram)
-        for listener in self.get_progress_listeners():
-            diagram_crawler.add_progress_listener(listener)
-
-        best_option = diagram_crawler.find_best_homology(priority='aggregation')
-        while best_option['Homology'] is not None:
-            self.record_progress(
-                expected_total = None,
-                task_description = str(diagram.compute_length()),
-            )
-            self.apply(best_option, diagram)
-            best_option = diagram_crawler.find_best_homology(priority='aggregation')
-
-        best_option = diagram_crawler.find_best_homology(priority='length')
-        while best_option['Homology'] is not None:
-            self.apply(best_option, diagram)
-            best_option = diagram_crawler.find_best_homology(priority='length')
-
-    def apply(self, basis_option, diagram):
-        homology = basis_option['Homology']
-        e12 = homology[0]
-        e23 = homology[1]
-        e13 = homology[2]
-        f1 = diagram.facet(e12[0])
-        f2 = diagram.facet(e12[1])
-        f3 = diagram.facet(e13[1])
-        s1 = f1.signature
-        s2 = f2.signature
-        s3 = f3.signature
-        ss12 = diagram.get_spanning_support(f1.signature, f2.signature)
-        ss23 = diagram.get_spanning_support(f2.signature, f3.signature)
-        ss13 = diagram.get_spanning_support(f1.signature, f3.signature)
-        movable_strands = list(set(ss12).intersection(set(ss23)))
-        if len(movable_strands) == 0:
-            logger.error('This homology can not be applied, no strands in common.')
-        new_ss12 = list(set(ss12).difference(movable_strands))
-        new_ss23 = list(set(ss23).difference(movable_strands))
-        new_ss13 = list(set(ss13).union(movable_strands))
-        graph = diagram.graph
-        if len(new_ss12) == 0:
-            graph.remove_edge(s1, s2)
-        if len(new_ss23) == 0:
-            graph.remove_edge(s2, s3)
-        if len(new_ss13) == 0:
-            graph.remove_edge(s1, s3)
-        if len(new_ss12) > 0:
-            if not graph.has_edge(s1, s2):
-                graph.add_edge(s1, s2)
-            graph.edges[s1, s2]['supports feature inference'] = new_ss12
-        if len(new_ss23) > 0:
-            if not graph.has_edge(s2, s3):
-                graph.add_edge(s2, s3)
-            graph.edges[s2, s3]['supports feature inference'] = new_ss23
-        if len(new_ss13) > 0:
-            if not graph.has_edge(s1, s3):
-                graph.add_edge(s1, s3)
-            graph.edges[s1, s3]['supports feature inference'] = new_ss13
