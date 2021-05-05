@@ -1,7 +1,7 @@
 import random
 import math
 
-from .strand_homology import StrandHomologyPriority
+from .strand_homology import StrandHomologyPriority, StrandHomologyEffectCalculator
 from .log_formats import colorized_logger
 logger = colorized_logger(__name__)
 
@@ -115,37 +115,20 @@ class StrandEnrichedHomologyAssessor:
                     triples.append([f1, f2, f3])
         return triples
 
+    def edge_length(self, signature1, signature2):
+        return math.sqrt(len(signature1) - len(signature2))
+
     def compute_effect(self, homology):
-        length_change = 0
-        e12 = homology[0]
-        e23 = homology[1]
-        e13 = homology[2]
-        f1 = self.diagram.facet(e12[0])
-        f2 = self.diagram.facet(e12[1])
-        f3 = self.diagram.facet(e13[1])
-        segment_length_12 = math.sqrt(len(f1.signature) - len(f2.signature))
-        segment_length_23 = math.sqrt(len(f2.signature) - len(f3.signature))
-        segment_length_13 = math.sqrt(len(f1.signature) - len(f3.signature))
-        ss12 = self.diagram.get_spanning_support(f1.signature, f2.signature)
-        ss23 = self.diagram.get_spanning_support(f2.signature, f3.signature)
-        ss13 = self.diagram.get_spanning_support(f1.signature, f3.signature)
-        movable_strands = list(set(ss12).intersection(set(ss23)))
-        if len(movable_strands) == 0:
-            length_change = 0
-            strand_aggregation_change = 0
-            return length_change, strand_aggregation_change
-        else:
-            new_ss12 = list(set(ss12).difference(movable_strands))
-            new_ss23 = list(set(ss23).difference(movable_strands))
-            new_ss13 = list(set(ss13).union(movable_strands))
-        length_change = 0
-        if len(new_ss12) == 0:
-            length_change += -1*segment_length_12
-        if len(new_ss23) == 0:
-            length_change += -1*segment_length_23
-        if len(ss13) == 0:
-            length_change += 1*segment_length_13
-        strand_aggregation_before = max([len(ss12), len(ss23), len(ss13)])
-        strand_aggregation_after = max([len(new_ss12), len(new_ss23), len(new_ss13)])
+        supp, new_supp, s, D = StrandHomologyEffectCalculator.compute_effect(homology, self.diagram)
+
+        I = lambda input_set: 0 if len(input_set) == 0 else 1
+        length_changes = [
+           (I(new_supp[(i,j)]) - I(supp[(i,j)])) * self.edge_length(s[i],s[j]) for i,j in supp.keys()
+        ]
+        length_change = sum(length_changes)
+
+        strand_aggregation_before = max([len(entry) for entry in supp.values()])
+        strand_aggregation_after = max([len(entry) for entry in new_supp.values()])
         strand_aggregation_change = strand_aggregation_after - strand_aggregation_before
+
         return length_change, strand_aggregation_change

@@ -74,9 +74,22 @@ class StrandHomologyEffectCalculator:
         }
         return [supp, new_supp, s, D]
 
-    def get_simplex_vertex(index, e):
-        for i, j in e.keys():
+    def get_simplex_vertex(index, edges):
+        """
+        The information identifying vertices (the signatures) is contained with
+        the edges themselves. This helper function picks out the vertex
+        signature by index by traversing the edges.
+
+        Args:
+            index (int):
+                The index of the desired vertex (0, 1, or 2).
+
+            edges (dict):
+                The edge signatures. Keys are (0,1), (1,2), (0,2), and each
+                value is a pair of signatures.
+        """
+        for i, j in edges.keys():
             if i == index:
-                return e[(i,j)][0]
+                return edges[(i,j)][0]
             if j == index:
-                return e[(i,j)][1]
+                return edges[(i,j)][1]
