@@ -8,7 +8,8 @@ import networkx as nx
 
 from .io import binary_matrix_from_file
 from .io import bipartite_diagram_representation_of_feature_matrix
-from .steiner_reduction import SteinerReduction, RandomResolutionOfBipartite
+from .regularization import RandomResolutionOfBipartite
+from .steiner_reduction import SteinerReduction
 from .progress_bar import ProgressBar
 from .io import save_preview_visualization
 

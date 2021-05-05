@@ -10,45 +10,6 @@ from .log_formats import colorized_logger
 logger = colorized_logger(__name__)
 
 
-class RandomResolutionOfBipartite(DescriptionDiagramMutator, ProgressingTask):
-    def __init__(self):
-        super().__init__()
-
-    def mutate(self, diagram):
-        self.do_regularization(diagram)
-
-    def do_regularization(self, diagram):
-        """
-        Create maximal chains out of each edge of the original bipartite graph.
-        """
-        graph = diagram.graph
-        existing_edges = list(graph.edges)
-        for point_signature, feature_signature in existing_edges:
-            self.record_progress(
-                expected_total = len(existing_edges),
-                task_description = 'Creating maximal chains.',
-            )
-            p = point_signature
-            f = feature_signature
-            reduced_signature = list(p)
-            reduced_signature.remove(f[0])
-            permutation = list(f) + list(np.random.permutation(reduced_signature))
-            graph.remove_edge(p, f)
-            for i in range(len(permutation)-1):
-                s1 = diagram.facet(permutation[0:(i+2)]).signature
-                s2 = diagram.facet(permutation[0:(i+1)]).signature
-                if graph.has_edge(s1, s2):
-                    support = graph.edges[s1, s2]['supports feature inference']
-                    graph.edges[s1, s2]['supports feature inference'] = support + [(p, f)]
-                else:
-                    graph.add_edge(s1, s2)
-                    graph.edges[s1, s2]['supports feature inference'] = [(p, f)]
-        logger.info(
-            'Weights: %s',
-            (list(set([len(graph.edges[e[0], e[1]]['supports feature inference']) for e in graph.edges]))),
-        )
-
-
 class StrandEnrichedHomologyAssessor(ProgressingTask):
     def __init__(self, diagram):
         self.diagram = diagram
@@ -62,10 +23,10 @@ class StrandEnrichedHomologyAssessor(ProgressingTask):
         ties = []
         triples = self.get_triples()
         for f1, f2, f3 in triples:
-            self.record_progress(
-                expected_total = len(triples),
-                task_description = 'Considering each basis homology.',
-            )
+            # self.record_progress(
+            #     expected_total = len(triples),
+            #     task_description = 'Considering each basis homology.',
+            # )
             ss12 = self.diagram.get_spanning_support(f1.signature, f2.signature)
             ss23 = self.diagram.get_spanning_support(f2.signature, f3.signature)
             ss13 = self.diagram.get_spanning_support(f1.signature, f3.signature)
@@ -149,10 +110,10 @@ class StrandEnrichedHomologyAssessor(ProgressingTask):
         for signature1, signature2 in edges:
             f1 = self.diagram.facet(signature1)
             f2 = self.diagram.facet(signature2)
-            self.record_progress(
-                expected_total = len(edges),
-                task_description='Building list of basis homology options.',
-            )
+            # self.record_progress(
+            #     expected_total = len(edges),
+            #     task_description='Building list of basis homology options.',
+            # )
             for signature3 in graph.successors(signature2):
                 f3 = self.diagram.facet(signature3)
                 ss12 = self.diagram.get_spanning_support(f1.signature, f2.signature)
@@ -219,6 +180,10 @@ class SteinerReduction(DescriptionDiagramMutator, ProgressingTask):
 
         best_option = diagram_crawler.find_best_homology(priority='aggregation')
         while best_option['Homology'] is not None:
+            self.record_progress(
+                expected_total = None,
+                task_description = str(diagram.compute_length()),
+            )
             self.apply(best_option, diagram)
             best_option = diagram_crawler.find_best_homology(priority='aggregation')
 
@@ -226,7 +191,6 @@ class SteinerReduction(DescriptionDiagramMutator, ProgressingTask):
         while best_option['Homology'] is not None:
             self.apply(best_option, diagram)
             best_option = diagram_crawler.find_best_homology(priority='length')
-
 
     def apply(self, basis_option, diagram):
         homology = basis_option['Homology']
@@ -267,9 +231,9 @@ class SteinerReduction(DescriptionDiagramMutator, ProgressingTask):
             if not graph.has_edge(s1, s3):
                 graph.add_edge(s1, s3)
             graph.edges[s1, s3]['supports feature inference'] = new_ss13
-        logger.info(
-            'Number of nodes, number of edges, and total length: %s, %s, %s',
-            len(graph.nodes),
-            len(graph.edges),
-            diagram.compute_length(),
-        )
+        # logger.info(
+        #     'Number of nodes, number of edges, and total length: %s, %s, %s',
+        #     len(graph.nodes),
+        #     len(graph.edges),
+        #     diagram.compute_length(),
+        # )

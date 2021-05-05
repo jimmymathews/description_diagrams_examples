@@ -19,9 +19,11 @@ class ProgressBar:
         self.total = None
         self.count = None
 
-    def report(self, expected_total: int=0, task_description=''):
+    def report(self, expected_total: int=None, task_description=''):
         """
         Typical progress bar for interactive mode.
+        If expected_total is None, the count is shown but no bar (since this
+        would normally indicate the expected final count).
 
         Args:
             expected_total (int):
@@ -41,26 +43,32 @@ class ProgressBar:
                     str(self.total),
                     str(total),
                 )
-        if self.count > self.total:
-            logger.warning('Task ("%s") doing more steps (%s) than expected (%s).',
-                task_description,
-                str(self.count),
-                str(self.total),
-            )
+            if self.count > self.total:
+                logger.warning('Task ("%s") doing more steps (%s) than expected (%s).',
+                    task_description,
+                    str(self.count),
+                    str(self.total),
+                )
         self.task_underway = True
-        tics = int(self.width * self.count / self.total)
+
         mg = ProgressBar.magenta
         gr = ProgressBar.green
-        if self.count < self.total:
-            color = mg
-            tic_character = '-'
-        else:
-            color = gr
-            tic_character = '='
         reset = ProgressBar.reset
-        bar = tic_character*tics + ' '*(self.width-tics)
-        wrapped_bar = '[' + color + bar + reset + ']'
-        counts = color + '(' + str(self.count) + '/' + str(self.total) + ')' + reset
+        if self.total:
+            tics = int(self.width * self.count / self.total)
+            if self.count < self.total:
+                color = mg
+                tic_character = '-'
+            else:
+                color = gr
+                tic_character = '='
+            bar = tic_character*tics + ' '*(self.width-tics)
+            wrapped_bar = '[' + color + bar + reset + ']'
+            counts = color + '(' + str(self.count) + '/' + str(self.total) + ')' + reset
+        else:
+            wrapped_bar = '(' + gr + str(self.count) + reset + ')'
+            counts = ''
+
         print('\r' + wrapped_bar + ' ' + task_description + ' ' + counts, end='')
         if self.count == self.total:
             self.terminate_report()
