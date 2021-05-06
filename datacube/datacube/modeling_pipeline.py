@@ -71,6 +71,8 @@ class ModelingPipeline:
             return self.input
 
     def send_to_output(self, diagram):
+        graph = diagram.graph
+
         for f in self.output_formats:
             if f == OutputFormats.GRAPHML:
                 nx.write_graphml(diagram.graph, self.file_basename + '.graphml')

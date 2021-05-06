@@ -1,6 +1,9 @@
 import enum
 from enum import Enum, auto
 
+from .log_formats import colorized_logger
+logger = colorized_logger(__name__)
+
 
 class StrandHomologyPriority(Enum):
     """
@@ -63,7 +66,9 @@ class StrandHomologyEffectCalculator:
             set(supp[(0,1)]).intersection(set(supp[(1,2)]))
         )
         if len(movable_strands) == 0:
-            logger.error('This homology can not be applied, no strands in common.')
+            logger.debug('The homology %s can not be applied, no strands in common.', [[diagram.facet(v).get_binary_vector_string() for v in e] for e in homology])
+            logger.debug('Domain sizes of would-be application: %s %s %s', len(supp[(0,1)]), len(supp[(1,2)]), len(supp[(0,2)]))
+            raise InapplicableHomology()
         strand_alteration = {
             (0,1) : (lambda x, y: x.difference(y)),
             (1,2) : (lambda x, y: x.difference(y)),
@@ -93,3 +98,7 @@ class StrandHomologyEffectCalculator:
                 return edges[(i,j)][0]
             if j == index:
                 return edges[(i,j)][1]
+
+
+class InapplicableHomology(Exception):
+    pass

@@ -22,7 +22,8 @@ def test_direct_input():
     pipeline.run()
 
 def test_from_file():
-    input_filename = 'colon_gtex_cell_cycle_genes_no_labels_50_samples_15_genes.csv'
+    # input_filename = 'colon_gtex_cell_cycle_genes_no_labels_50_samples_15_genes.csv'
+    input_filename = 'colon_gtex_cell_cycle_genes_no_labels_20_samples.csv'
     pipeline = ModelingPipeline(
         input_filename,
         output_formats=[OutputFormats.GRAPHML, OutputFormats.PNG],
